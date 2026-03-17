@@ -56,10 +56,10 @@ cmd_type :: proc(args: []string, filename: string, append_file: bool) {
 						fmt.printf("type: error reading file stat: %w\n", stat_err)
 					}
 
-					// This is for odin-2026-03-nightly
-					if os.Permission_Flag.Execute_User in stat.mode {
-						// // This is for odin-2025-07 (codecrafters version)
-						// if stat.mode & 0o100 != 0 {
+					// // This is for odin-2026-03-nightly
+					// if os.Permission_Flag.Execute_User in stat.mode {
+					// This is for odin-2025-07 (codecrafters version)
+					if stat.mode & 0o100 != 0 {
 
 						if filename == "" {
 							fmt.printf("%s is %s\n", arg, full)
@@ -80,14 +80,14 @@ cmd_type :: proc(args: []string, filename: string, append_file: bool) {
 }
 
 cmd_pwd :: proc(args: []string, filename: string, append_file: bool) {
-	// This is for odin-2026-03-nightly
-	pwd, pwd_err := os.get_working_directory(context.temp_allocator)
-	if pwd_err != nil {
-		fmt.printf("pwd: %w\n", pwd_err)
-	}
+	// // This is for odin-2026-03-nightly
+	// pwd, pwd_err := os.get_working_directory(context.temp_allocator)
+	// if pwd_err != nil {
+	// 	fmt.printf("pwd: %w\n", pwd_err)
+	// }
 
-	// // This is for odin-2025-07 (codecrafters version)
-	// pwd := os.get_current_directory(context.temp_allocator)
+	// This is for odin-2025-07 (codecrafters version)
+	pwd := os.get_current_directory(context.temp_allocator)
 
 
 	if filename == "" {
@@ -110,17 +110,17 @@ cmd_cd :: proc(args: []string, filename: string, append_file: bool) {
 			}
 		}
 
-		// This is for odin-2026-03-nightly
-		cd_err := os.change_directory(path)
-		if cd_err != nil {
-			fmt.printf("cd: %s: No such file or directory\n", path)
-		}
-
-		// // This is for odin-2025-07 (codecrafters version)
-		// cd_err := os.set_current_directory(path)
+		// // This is for odin-2026-03-nightly
+		// cd_err := os.change_directory(path)
 		// if cd_err != nil {
 		// 	fmt.printf("cd: %s: No such file or directory\n", path)
 		// }
+
+		// This is for odin-2025-07 (codecrafters version)
+		cd_err := os.set_current_directory(path)
+		if cd_err != nil {
+			fmt.printf("cd: %s: No such file or directory\n", path)
+		}
 	}
 }
 
