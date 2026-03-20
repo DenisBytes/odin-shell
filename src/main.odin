@@ -54,6 +54,7 @@ main :: proc() {
 	posix.tcsetattr(posix.FD(c.int(0)), .TCSANOW, &raw)
 
 	input_str := ""
+	history_index := len(commands_history)
 
 	for {
 		fmt.printf("$ ")
@@ -71,19 +72,54 @@ main :: proc() {
 			ch := char_buf[0]
 
 			switch ch {
+			// ENTER
 			case '\n':
 				fmt.printf("\n")
 				input_str = string(input_buf[:])
 				break inner
+			// TAB
 			case '\t':
 				tab_count += 1
 				try_autocomplete(&input_buf, tab_count)
 				continue
+			// DELETE
 			case 127:
 				tab_count = 0
 				if len(input_buf) > 0 {
 					pop(&input_buf)
 					fmt.printf("\b \b")
+				}
+				continue
+			// ARROW_UP
+			case '\x1b':
+				seq: [2]byte
+				os.read(os.stdin, seq[:])
+				if seq[0] == '[' && seq[1] == 'A' {
+					if history_index > 0 {
+						history_index -= 1
+						fmt.printf("\r$ ")
+						for _ in 0 ..< len(input_buf) {
+							fmt.printf(" ")
+						}
+						fmt.printf("\r$ ")
+						history_bytes := transmute([]byte)commands_history[history_index]
+						clear(&input_buf)
+						append(&input_buf, ..history_bytes)
+						fmt.printf("%s", string(input_buf[:]))
+					}
+				} else if seq[0] == '[' && seq[1] == 'B' {
+					if history_index < len(commands_history) - 1 {
+						history_index += 1
+						fmt.printf("\r$ ")
+						for _ in 0 ..< len(input_buf) {
+							fmt.printf(" ")
+						}
+						fmt.printf("\r$ ")
+						history_bytes := transmute([]byte)commands_history[history_index]
+						clear(&input_buf)
+						append(&input_buf, ..history_bytes)
+						fmt.printf("%s", string(input_buf[:]))
+					}
 				}
 				continue
 			case:
@@ -93,6 +129,9 @@ main :: proc() {
 			}
 		}
 
+		input_clone, _ := strings.clone(input_str)
+		append(&commands_history, input_clone)
+		history_index = len(commands_history)
 
 		pipe_split_commands, pipe_split_err := pipe_split(input_str)
 		if pipe_split_err != nil {
@@ -134,85 +173,30 @@ main :: proc() {
 							fmt.printf("shell: error reading file stat: %w\n", stat_err)
 						}
 
-						// // This is for odin-2026-03-nightly
-						// if os.Permission_Flag.Execute_User in stat.mode {
-						// This is for odin-2025-07 (codecrafters version)
-						if stat.mode & 0o100 != 0 {
+						// This is for odin-2026-03-nightly
+						if os.Permission_Flag.Execute_User in stat.mode {
+							// // This is for odin-2025-07 (codecrafters version)
+							// if stat.mode & 0o100 != 0 {
 
-							// // This is for odin-2026-03-nightly
-							// cmd := make([dynamic]string, context.temp_allocator)
-							// append(&cmd, full)
-							// for arg in args {
-							// 	append(&cmd, arg)
-							// }
-
-							// This is for odin-2025-07 (codecrafters version)
+							// This is for odin-2026-03-nightly
 							cmd := make([dynamic]string, context.temp_allocator)
+							append(&cmd, full)
 							for arg in args {
 								append(&cmd, arg)
 							}
 
-
-							// // This is for odin-2026-03-nightly
-							// pid := posix.fork()
-							// switch pid {
-							// case -1:
-							// 	fmt.printf("shell: error in creating fork.\n")
-							// case 0:
-							// 	if len(stdout_filename) > 0 {
-							// 		flags := posix.O_Flags{.WRONLY, .CREAT}
-							// 		flags += {.APPEND} if append_file else {.TRUNC}
-							// 		fd := posix.open(
-							// 			strings.clone_to_cstring(stdout_filename),
-							// 			flags,
-							// 			{.IRUSR, .IWUSR, .IRGRP, .IROTH},
-							// 		)
-							// 		posix.dup2(fd, 1)
-							// 		posix.close(fd)
-							// 	}
-							// 	if len(stderr_filename) > 0 {
-							// 		flags := posix.O_Flags{.WRONLY, .CREAT}
-							// 		flags += {.APPEND} if append_file else {.TRUNC}
-							// 		fd := posix.open(
-							// 			strings.clone_to_cstring(stderr_filename),
-							// 			flags,
-							// 			{.IRUSR, .IWUSR, .IRGRP, .IROTH},
-							// 		)
-							// 		posix.dup2(fd, 2)
-							// 		posix.close(fd)
-							// 	}
-							// 	c_command, c_command_err := strings.clone_to_cstring(
-							// 		command,
-							// 		context.temp_allocator,
-							// 	)
-							// 	if c_command_err != nil {
-							// 		fmt.printf(
-							// 			"shell: error executing command: %w\n",
-							// 			c_command_err,
-							// 		)
-							// 	}
-							// 	c_cmd := make([dynamic]cstring, context.temp_allocator)
-							// 	for s in cmd {
-							// 		c_s, c_s_err := strings.clone_to_cstring(
-							// 			s,
-							// 			context.temp_allocator,
-							// 		)
-							// 		if c_s_err != nil {
-							// 			fmt.printf("shell: error executing command: %w\n", c_s_err)
-							// 		}
-							// 		append(&c_cmd, c_s)
-							// 	}
-							// 	append(&c_cmd, nil)
-							// 	posix.execvp(c_command, raw_data(c_cmd[:]))
-							// 	os.exit(1)
-							// case:
-							// 	status: i32
-							// 	posix.waitpid(posix.pid_t(pid), &status, {})
+							// // This is for odin-2025-07 (codecrafters version)
+							// cmd := make([dynamic]string, context.temp_allocator)
+							// for arg in args {
+							// 	append(&cmd, arg)
 							// }
 
-							// This is for odin-2025-07 (codecrafters version)
-							pid, _ := os.fork()
+
+							// This is for odin-2026-03-nightly
+							pid := posix.fork()
 							switch pid {
+							case -1:
+								fmt.printf("shell: error in creating fork.\n")
 							case 0:
 								if len(stdout_filename) > 0 {
 									flags := posix.O_Flags{.WRONLY, .CREAT}
@@ -236,12 +220,67 @@ main :: proc() {
 									posix.dup2(fd, 2)
 									posix.close(fd)
 								}
-								os.execvp(command, cmd[:])
+								c_command, c_command_err := strings.clone_to_cstring(
+									command,
+									context.temp_allocator,
+								)
+								if c_command_err != nil {
+									fmt.printf(
+										"shell: error executing command: %w\n",
+										c_command_err,
+									)
+								}
+								c_cmd := make([dynamic]cstring, context.temp_allocator)
+								for s in cmd {
+									c_s, c_s_err := strings.clone_to_cstring(
+										s,
+										context.temp_allocator,
+									)
+									if c_s_err != nil {
+										fmt.printf("shell: error executing command: %w\n", c_s_err)
+									}
+									append(&c_cmd, c_s)
+								}
+								append(&c_cmd, nil)
+								posix.execvp(c_command, raw_data(c_cmd[:]))
 								os.exit(1)
 							case:
 								status: i32
 								posix.waitpid(posix.pid_t(pid), &status, {})
 							}
+
+							// // This is for odin-2025-07 (codecrafters version)
+							// pid, _ := os.fork()
+							// switch pid {
+							// case 0:
+							// 	if len(stdout_filename) > 0 {
+							// 		flags := posix.O_Flags{.WRONLY, .CREAT}
+							// 		flags += {.APPEND} if append_file else {.TRUNC}
+							// 		fd := posix.open(
+							// 			strings.clone_to_cstring(stdout_filename),
+							// 			flags,
+							// 			{.IRUSR, .IWUSR, .IRGRP, .IROTH},
+							// 		)
+							// 		posix.dup2(fd, 1)
+							// 		posix.close(fd)
+							// 	}
+							// 	if len(stderr_filename) > 0 {
+							// 		flags := posix.O_Flags{.WRONLY, .CREAT}
+							// 		flags += {.APPEND} if append_file else {.TRUNC}
+							// 		fd := posix.open(
+							// 			strings.clone_to_cstring(stderr_filename),
+							// 			flags,
+							// 			{.IRUSR, .IWUSR, .IRGRP, .IROTH},
+							// 		)
+							// 		posix.dup2(fd, 2)
+							// 		posix.close(fd)
+							// 	}
+							// 	os.execvp(command, cmd[:])
+							// 	os.exit(1)
+							// case:
+							// 	status: i32
+							// 	posix.waitpid(posix.pid_t(pid), &status, {})
+							// }
 
 							break outer
 						}

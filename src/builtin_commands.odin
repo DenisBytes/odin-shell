@@ -4,19 +4,23 @@ package main
 import "core:c"
 import "core:fmt"
 import "core:os"
+import "core:strconv"
 import "core:strings"
 import "core:sys/posix"
 
-BUILTIN_COMMANDS := []string{"echo", "type", "pwd", "cd", "exit"}
+commands_history: [dynamic]string
+
+BUILTIN_COMMANDS := []string{"echo", "type", "pwd", "cd", "history", "exit"}
 
 Commands_Proc :: proc(args: []string, filename: string, append_file: bool)
 
 handlers := map[string]Commands_Proc {
-	"echo" = cmd_echo,
-	"type" = cmd_type,
-	"pwd"  = cmd_pwd,
-	"cd"   = cmd_cd,
-	"exit" = cmd_exit,
+	"echo"    = cmd_echo,
+	"type"    = cmd_type,
+	"pwd"     = cmd_pwd,
+	"cd"      = cmd_cd,
+	"history" = cmd_history,
+	"exit"    = cmd_exit,
 }
 
 cmd_echo :: proc(args: []string, filename: string, append_file: bool) {
@@ -35,7 +39,7 @@ cmd_echo :: proc(args: []string, filename: string, append_file: bool) {
 cmd_type :: proc(args: []string, filename: string, append_file: bool) {
 	for arg in args {
 		outer: switch arg {
-		case "type", "echo", "pwd", "cd", "exit":
+		case "type", "echo", "pwd", "cd", "history", "exit":
 			if filename == "" {
 				fmt.printf("%s is a shell builtin\n", arg)
 			} else {
@@ -56,10 +60,10 @@ cmd_type :: proc(args: []string, filename: string, append_file: bool) {
 						fmt.printf("type: error reading file stat: %w\n", stat_err)
 					}
 
-					// // This is for odin-2026-03-nightly
-					// if os.Permission_Flag.Execute_User in stat.mode {
-					// This is for odin-2025-07 (codecrafters version)
-					if stat.mode & 0o100 != 0 {
+					// This is for odin-2026-03-nightly
+					if os.Permission_Flag.Execute_User in stat.mode {
+						// // This is for odin-2025-07 (codecrafters version)
+						// if stat.mode & 0o100 != 0 {
 
 						if filename == "" {
 							fmt.printf("%s is %s\n", arg, full)
@@ -80,14 +84,14 @@ cmd_type :: proc(args: []string, filename: string, append_file: bool) {
 }
 
 cmd_pwd :: proc(args: []string, filename: string, append_file: bool) {
-	// // This is for odin-2026-03-nightly
-	// pwd, pwd_err := os.get_working_directory(context.temp_allocator)
-	// if pwd_err != nil {
-	// 	fmt.printf("pwd: %w\n", pwd_err)
-	// }
+	// This is for odin-2026-03-nightly
+	pwd, pwd_err := os.get_working_directory(context.temp_allocator)
+	if pwd_err != nil {
+		fmt.printf("pwd: %w\n", pwd_err)
+	}
 
-	// This is for odin-2025-07 (codecrafters version)
-	pwd := os.get_current_directory(context.temp_allocator)
+	// // This is for odin-2025-07 (codecrafters version)
+	// pwd := os.get_current_directory(context.temp_allocator)
 
 
 	if filename == "" {
@@ -110,16 +114,39 @@ cmd_cd :: proc(args: []string, filename: string, append_file: bool) {
 			}
 		}
 
-		// // This is for odin-2026-03-nightly
-		// cd_err := os.change_directory(path)
+		// This is for odin-2026-03-nightly
+		cd_err := os.change_directory(path)
+		if cd_err != nil {
+			fmt.printf("cd: %s: No such file or directory\n", path)
+		}
+
+		// // This is for odin-2025-07 (codecrafters version)
+		// cd_err := os.set_current_directory(path)
 		// if cd_err != nil {
 		// 	fmt.printf("cd: %s: No such file or directory\n", path)
 		// }
+	}
+}
 
-		// This is for odin-2025-07 (codecrafters version)
-		cd_err := os.set_current_directory(path)
-		if cd_err != nil {
-			fmt.printf("cd: %s: No such file or directory\n", path)
+cmd_history :: proc(args: []string, filename: string, append_file: bool) {
+	starting_index := 0
+	if len(args) > 0 {
+		arg, ok := strconv.parse_int(args[0], 10)
+		if ok {
+			starting_index = len(commands_history) - arg
+		}
+	}
+	for i in starting_index ..< len(commands_history) {
+		num_str := fmt.tprintf("%d", i + 1)
+		padding := 5 - len(num_str)
+		for _ in 0 ..< padding {
+			fmt.printf(" ")
+		}
+		if filename == "" {
+			fmt.printf("%s  %s\n", num_str, commands_history[i])
+		} else {
+			line := fmt.tprintf("%s  %s\n", num_str, commands_history[i])
+			redirect_output(line, filename, append_file)
 		}
 	}
 }
