@@ -9,57 +9,40 @@ import "core:strings"
 import "core:sys/posix"
 
 redirect_output :: proc(output: string, filename: string, append_file: bool) {
-	// // This is for odin-2026-03-nightly
-	// pwd, pwd_err := os.get_working_directory(context.temp_allocator)
-	// if pwd_err != nil {
-	// 	fmt.printf("shell: could not read current working directory %w\n", pwd_err)
-	// }
-
-	// This is for odin-2025-07 (codecrafters version)
-	pwd := os.get_current_directory(context.temp_allocator)
-
+	pwd, pwd_err := os.get_working_directory(context.temp_allocator)
+	if pwd_err != nil {
+		fmt.printf("shell: could not read current working directory %w\n", pwd_err)
+	}
 
 	full := filename
 	if filename[0] != '/' {
 		full = strings.concatenate({pwd, "/", filename})
 	}
 
-	// // This is for odin-2026-03-nightly
-	// file := &os.File{}
-	// file_err := os.Error{}
-	// if append_file {
-	// 	file, file_err = os.open(
-	// 		filename,
-	// 		os.O_WRONLY | os.O_CREATE | os.O_APPEND,
-	// 		{.Read_User, .Write_User, .Read_Group, .Read_Other},
-	// 	)
-	// } else {
-	// 	file, file_err = os.open(
-	// 		filename,
-	// 		os.O_WRONLY | os.O_CREATE | os.O_TRUNC,
-	// 		{.Read_User, .Write_User, .Read_Group, .Read_Other},
-	// 	)
-	// }
-	// if file_err != nil {
-	// 	fmt.printf("shell: could not create or truncate file %s\n", filename)
-	// 	return
-	// }
-	// _, write_err := os.write_string(file, output)
-	// if write_err != nil {
-	// 	fmt.printf("shell: could not write to file %s\n", filename)
-	// 	return
-	// }
-
-	// This is for odin-2025-07 (codecrafters version)
-	file := os.Handle{}
-	file_err := os.Errno{}
+	file := &os.File{}
+	file_err := os.Error{}
 	if append_file {
-		file, file_err = os.open(filename, os.O_WRONLY | os.O_CREATE | os.O_APPEND, 0o644)
+		file, file_err = os.open(
+			filename,
+			os.O_WRONLY | os.O_CREATE | os.O_APPEND,
+			{.Read_User, .Write_User, .Read_Group, .Read_Other},
+		)
 	} else {
-		file, file_err = os.open(filename, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0o644)
+		file, file_err = os.open(
+			filename,
+			os.O_WRONLY | os.O_CREATE | os.O_TRUNC,
+			{.Read_User, .Write_User, .Read_Group, .Read_Other},
+		)
 	}
-	os.write_string(file, output)
-	os.close(file)
+	if file_err != nil {
+		fmt.printf("shell: could not create or truncate file %s\n", filename)
+		return
+	}
+	_, write_err := os.write_string(file, output)
+	if write_err != nil {
+		fmt.printf("shell: could not write to file %s\n", filename)
+		return
+	}
 }
 
 
@@ -94,10 +77,7 @@ try_autocomplete :: proc(input_buf: ^[dynamic]byte, tab_count: uint) {
 			display_matches := [dynamic]string{}
 			for entry in entries {
 				if strings.has_prefix(entry.name, file_prefix) {
-					// // This is for odin-2026-03-nightly
-					// if entry.type == .Directory {
-					// This is for odin-2025-07 (codecrafters version)
-					if entry.is_dir {
+					if entry.type == .Directory {
 						append(&file_matches, entry.name)
 						append(&display_matches, fmt.tprintf("%s/", entry.name))
 					} else {
@@ -168,10 +148,7 @@ try_autocomplete :: proc(input_buf: ^[dynamic]byte, tab_count: uint) {
 			display_matches := [dynamic]string{}
 			for entry in entries {
 				if strings.has_prefix(entry.name, prefix[prefix_filename_index + 1:]) {
-					// // This is for odin-2026-03-nightly
-					// if entry.type == .Directory {
-					// This is for odin-2025-07 (codecrafters version)
-					if entry.is_dir {
+					if entry.type == .Directory {
 						append(&file_matches, entry.name)
 						append(&display_matches, fmt.tprintf("%s/", entry.name))
 					} else {
@@ -424,17 +401,12 @@ execute_pipeline :: proc(commands: []string) {
 							fmt.printf("shell: error reading file stat: %w\n", stat_err)
 						}
 
-						// // This is for odin-2026-03-nightly
-						// if os.Permission_Flag.Execute_User in stat.mode {
-						// This is for odin-2025-07 (codecrafters version)
-						if stat.mode & 0o100 != 0 {
-
+						if os.Permission_Flag.Execute_User in stat.mode {
 							cmd := make([dynamic]string, context.temp_allocator)
 							append(&cmd, full)
 							for arg in args {
 								append(&cmd, arg)
 							}
-
 
 							if len(stdout_filename) > 0 {
 								flags := posix.O_Flags{.WRONLY, .CREAT}

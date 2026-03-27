@@ -56,24 +56,8 @@ main :: proc() {
 	history_file := os.get_env_alloc("HISTFILE", context.temp_allocator)
 	if len(history_file) > 0 {
 
-		// // This is for odin-2026-03-nightly
-		// file_bytes, file_bytes_err := os.read_entire_file(history_file)
-		// if file_bytes_err == nil {
-		// 	history_commands, history_commands_err := strings.split(string(file_bytes[:]), "\n")
-		// 	if history_commands_err != nil {
-		// 		fmt.printf("history: parsing error: %w\n", history_commands_err)
-		// 		return
-		// 	}
-		// 	for c in history_commands {
-		// 		if len(c) != 0 {
-		// 			append(&commands_history, strings.clone(c))
-		// 		}
-		// 	}
-		// }
-
-		// This is for odin-2025-07 (codecrafters version)
-		file_bytes, ok := os.read_entire_file(history_file)
-		if ok {
+		file_bytes, file_bytes_err := os.read_entire_file(history_file)
+		if file_bytes_err == nil {
 			history_commands, history_commands_err := strings.split(string(file_bytes[:]), "\n")
 			if history_commands_err != nil {
 				fmt.printf("history: parsing error: %w\n", history_commands_err)
@@ -86,6 +70,7 @@ main :: proc() {
 			}
 		}
 	}
+
 	last_append_index = len(commands_history)
 
 	input_str := ""
@@ -208,85 +193,17 @@ main :: proc() {
 							fmt.printf("shell: error reading file stat: %w\n", stat_err)
 						}
 
-						// // This is for odin-2026-03-nightly
-						// if os.Permission_Flag.Execute_User in stat.mode {
-						// This is for odin-2025-07 (codecrafters version)
-						if stat.mode & 0o100 != 0 {
-
-							// // This is for odin-2026-03-nightly
-							// cmd := make([dynamic]string, context.temp_allocator)
-							// append(&cmd, full)
-							// for arg in args {
-							// 	append(&cmd, arg)
-							// }
-
-							// This is for odin-2025-07 (codecrafters version)
+						if os.Permission_Flag.Execute_User in stat.mode {
 							cmd := make([dynamic]string, context.temp_allocator)
+							append(&cmd, full)
 							for arg in args {
 								append(&cmd, arg)
 							}
 
-
-							// // This is for odin-2026-03-nightly
-							// pid := posix.fork()
-							// switch pid {
-							// case -1:
-							// 	fmt.printf("shell: error in creating fork.\n")
-							// case 0:
-							// 	if len(stdout_filename) > 0 {
-							// 		flags := posix.O_Flags{.WRONLY, .CREAT}
-							// 		flags += {.APPEND} if append_file else {.TRUNC}
-							// 		fd := posix.open(
-							// 			strings.clone_to_cstring(stdout_filename),
-							// 			flags,
-							// 			{.IRUSR, .IWUSR, .IRGRP, .IROTH},
-							// 		)
-							// 		posix.dup2(fd, 1)
-							// 		posix.close(fd)
-							// 	}
-							// 	if len(stderr_filename) > 0 {
-							// 		flags := posix.O_Flags{.WRONLY, .CREAT}
-							// 		flags += {.APPEND} if append_file else {.TRUNC}
-							// 		fd := posix.open(
-							// 			strings.clone_to_cstring(stderr_filename),
-							// 			flags,
-							// 			{.IRUSR, .IWUSR, .IRGRP, .IROTH},
-							// 		)
-							// 		posix.dup2(fd, 2)
-							// 		posix.close(fd)
-							// 	}
-							// 	c_command, c_command_err := strings.clone_to_cstring(
-							// 		command,
-							// 		context.temp_allocator,
-							// 	)
-							// 	if c_command_err != nil {
-							// 		fmt.printf(
-							// 			"shell: error executing command: %w\n",
-							// 			c_command_err,
-							// 		)
-							// 	}
-							// 	c_cmd := make([dynamic]cstring, context.temp_allocator)
-							// 	for s in cmd {
-							// 		c_s, c_s_err := strings.clone_to_cstring(
-							// 			s,
-							// 			context.temp_allocator,
-							// 		)
-							// 		if c_s_err != nil {
-							// 			fmt.printf("shell: error executing command: %w\n", c_s_err)
-							// 		}
-							// 		append(&c_cmd, c_s)
-							// 	}
-							// 	append(&c_cmd, nil)
-							// 	posix.execvp(c_command, raw_data(c_cmd[:]))
-							// 	os.exit(1)
-							// case:
-							// 	status: i32
-							// 	posix.waitpid(posix.pid_t(pid), &status, {})
-							// }
-
-							// This is for odin-2025-07 (codecrafters version)
-							pid, _ := os.fork()
+							pid := posix.fork()
 							switch pid {
+							case -1:
+								fmt.printf("shell: error in creating fork.\n")
 							case 0:
 								if len(stdout_filename) > 0 {
 									flags := posix.O_Flags{.WRONLY, .CREAT}
@@ -310,7 +227,29 @@ main :: proc() {
 									posix.dup2(fd, 2)
 									posix.close(fd)
 								}
-								os.execvp(command, cmd[:])
+								c_command, c_command_err := strings.clone_to_cstring(
+									command,
+									context.temp_allocator,
+								)
+								if c_command_err != nil {
+									fmt.printf(
+										"shell: error executing command: %w\n",
+										c_command_err,
+									)
+								}
+								c_cmd := make([dynamic]cstring, context.temp_allocator)
+								for s in cmd {
+									c_s, c_s_err := strings.clone_to_cstring(
+										s,
+										context.temp_allocator,
+									)
+									if c_s_err != nil {
+										fmt.printf("shell: error executing command: %w\n", c_s_err)
+									}
+									append(&c_cmd, c_s)
+								}
+								append(&c_cmd, nil)
+								posix.execvp(c_command, raw_data(c_cmd[:]))
 								os.exit(1)
 							case:
 								status: i32
