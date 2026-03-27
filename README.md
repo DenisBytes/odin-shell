@@ -1,6 +1,6 @@
 # odin-shell
 
-Implementing a zsh-like shell from scratch in Odin.
+Implementing a zsh shell from scratch in Odin.
 
 ## What's working so far
 
