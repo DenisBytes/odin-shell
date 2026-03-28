@@ -38,21 +38,22 @@ cmd_echo :: proc(args: []string, filename: string, append_file: bool) {
 
 cmd_type :: proc(args: []string, filename: string, append_file: bool) {
 	for arg in args {
-		outer: switch arg {
-		case "type", "echo", "pwd", "cd", "history", "exit":
+		if arg in handlers {
 			if filename == "" {
 				fmt.printf("%s is a shell builtin\n", arg)
 			} else {
 				redirect_output(fmt.tprintf("%s is a shell builtin\n", arg), filename, append_file)
 			}
-		case:
+
+		} else {
+
 			path := os.get_env_alloc("PATH", context.temp_allocator)
 			dirs, split_path_err := strings.split(path, ":")
 			if split_path_err != nil {
 				fmt.printf("type: error splitting PATH: %w\n", split_path_err)
 			}
 
-			for dir in dirs {
+			outer: for dir in dirs {
 				full := strings.concatenate({dir, "/", arg})
 				if os.exists(full) {
 					stat, stat_err := os.stat(full, context.temp_allocator)
