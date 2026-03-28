@@ -1,7 +1,9 @@
 package main
 
+import "base:runtime"
 import "core:c"
 import "core:fmt"
+import "core:io"
 import "core:os"
 import "core:strings"
 import "core:sys/posix"
@@ -56,7 +58,7 @@ main :: proc() {
 	history_file := os.get_env_alloc("HISTFILE", context.temp_allocator)
 	if len(history_file) > 0 {
 
-		file_bytes, file_bytes_err := os.read_entire_file(history_file)
+		file_bytes, file_bytes_err := os.read_entire_file(history_file, context.temp_allocator)
 		if file_bytes_err == nil {
 			history_commands, history_commands_err := strings.split(string(file_bytes[:]), "\n")
 			if history_commands_err != nil {
@@ -77,7 +79,7 @@ main :: proc() {
 	history_index := len(commands_history)
 
 	for {
-		fmt.printf("$ ")
+		fmt.printf(PROMPT)
 		input_buf: [dynamic]byte
 		defer delete(input_buf)
 
@@ -117,11 +119,11 @@ main :: proc() {
 				if seq[0] == '[' && seq[1] == 'A' {
 					if history_index > 0 {
 						history_index -= 1
-						fmt.printf("\r$ ")
+						fmt.printf("\r%s", PROMPT)
 						for _ in 0 ..< len(input_buf) {
 							fmt.printf(" ")
 						}
-						fmt.printf("\r$ ")
+						fmt.printf("\r%s", PROMPT)
 						history_bytes := transmute([]byte)commands_history[history_index]
 						clear(&input_buf)
 						append(&input_buf, ..history_bytes)
@@ -130,11 +132,11 @@ main :: proc() {
 				} else if seq[0] == '[' && seq[1] == 'B' {
 					if history_index < len(commands_history) - 1 {
 						history_index += 1
-						fmt.printf("\r$ ")
+						fmt.printf("\r%s", PROMPT)
 						for _ in 0 ..< len(input_buf) {
 							fmt.printf(" ")
 						}
-						fmt.printf("\r$ ")
+						fmt.printf("\r%s", PROMPT)
 						history_bytes := transmute([]byte)commands_history[history_index]
 						clear(&input_buf)
 						append(&input_buf, ..history_bytes)
@@ -153,114 +155,82 @@ main :: proc() {
 		append(&commands_history, input_clone)
 		history_index = len(commands_history)
 
-		pipe_split_commands, pipe_split_err := pipe_split(input_str)
-		if pipe_split_err != nil {
-			fmt.printf("shell: error in parsing. error: %w\n", pipe_split_err)
-		}
+		pipe_split_commands := pipe_split(input_str)
 
 		if len(pipe_split_commands) > 1 {
 			execute_pipeline(pipe_split_commands)
 		} else {
-			command, args, stdout_filename, stderr_filename, append_file, input_err := parse_input(
-				input_str,
-			)
-			if input_err != nil {
-				fmt.printf("shell: error in parsing. error: %w\n", input_err)
+			parse_result, err := parse_input(input_str)
+			if err != nil {
+				switch e in err {
+				case Shell_Error:
+					#partial switch e {
+					case .Empty_Input:
+						continue
+					case:
+						fmt.printf("shell: error: %v", err)
+					}
+				case runtime.Allocator_Error:
+					fmt.printf("shell: alloc error: %v", err)
+				case io.Error:
+					fmt.printf("shell: io error: %v", err)
+				}
 			}
 
-			if handler, ok := handlers[command]; ok {
+			if handler, ok := handlers[parse_result.command]; ok {
 
-				handler(args, stdout_filename, append_file)
-				if len(stderr_filename) > 0 {
-					redirect_output("", stderr_filename, append_file)
+				handler(
+					parse_result.args,
+					parse_result.stdout_redirect.filename,
+					parse_result.stdout_redirect.append_mode,
+				)
+				if len(parse_result.stderr_redirect.filename) > 0 {
+					redirect_output(
+						"",
+						parse_result.stderr_redirect.filename,
+						parse_result.stderr_redirect.append_mode,
+					)
 				}
 
 			} else {
 
-				path := os.get_env_alloc("PATH", context.temp_allocator)
-				dirs, split_dir_err := strings.split(path, ":")
-				if split_dir_err != nil {
-					fmt.printf("shell: error splitting PATH: %w\n", split_dir_err)
-				}
-
-				found := false
-				outer: for dir in dirs {
-					full := strings.concatenate({dir, "/", command})
-					if os.exists(full) {
-						found = true
-						stat, stat_err := os.stat(full, context.temp_allocator)
-						if stat_err != nil {
-							fmt.printf("shell: error reading file stat: %w\n", stat_err)
+				full_path, found, err := resolve_command(parse_result.command)
+				if err != nil {
+					switch e in err {
+					case Shell_Error:
+						#partial switch e {
+						case .Empty_Input:
+							continue
+						case:
+							fmt.printf("shell: error: %v", err)
 						}
-
-						if os.Permission_Flag.Execute_User in stat.mode {
-							cmd := make([dynamic]string, context.temp_allocator)
-							append(&cmd, full)
-							for arg in args {
-								append(&cmd, arg)
-							}
-
-							pid := posix.fork()
-							switch pid {
-							case -1:
-								fmt.printf("shell: error in creating fork.\n")
-							case 0:
-								if len(stdout_filename) > 0 {
-									flags := posix.O_Flags{.WRONLY, .CREAT}
-									flags += {.APPEND} if append_file else {.TRUNC}
-									fd := posix.open(
-										strings.clone_to_cstring(stdout_filename),
-										flags,
-										{.IRUSR, .IWUSR, .IRGRP, .IROTH},
-									)
-									posix.dup2(fd, 1)
-									posix.close(fd)
-								}
-								if len(stderr_filename) > 0 {
-									flags := posix.O_Flags{.WRONLY, .CREAT}
-									flags += {.APPEND} if append_file else {.TRUNC}
-									fd := posix.open(
-										strings.clone_to_cstring(stderr_filename),
-										flags,
-										{.IRUSR, .IWUSR, .IRGRP, .IROTH},
-									)
-									posix.dup2(fd, 2)
-									posix.close(fd)
-								}
-								c_command, c_command_err := strings.clone_to_cstring(
-									command,
-									context.temp_allocator,
-								)
-								if c_command_err != nil {
-									fmt.printf(
-										"shell: error executing command: %w\n",
-										c_command_err,
-									)
-								}
-								c_cmd := make([dynamic]cstring, context.temp_allocator)
-								for s in cmd {
-									c_s, c_s_err := strings.clone_to_cstring(
-										s,
-										context.temp_allocator,
-									)
-									if c_s_err != nil {
-										fmt.printf("shell: error executing command: %w\n", c_s_err)
-									}
-									append(&c_cmd, c_s)
-								}
-								append(&c_cmd, nil)
-								posix.execvp(c_command, raw_data(c_cmd[:]))
-								os.exit(1)
-							case:
-								status: i32
-								posix.waitpid(posix.pid_t(pid), &status, {})
-							}
-
-							break outer
-						}
+					case runtime.Allocator_Error:
+						fmt.printf("shell: alloc error: %v", err)
+					case io.Error:
+						fmt.printf("shell: io error: %v", err)
 					}
 				}
-				if !found {fmt.printf("%s: command not found\n", command)}
+
+				if found {
+
+					pid := posix.fork()
+					switch pid {
+					case -1:
+						fmt.printf("shell: error in creating fork.\n")
+					case 0:
+						err = exec_external(full_path, parse_result)
+						if err != nil {
+							fmt.printf("shell: alloc err: %v", err)
+							return
+						}
+					case:
+						status: i32
+						posix.waitpid(posix.pid_t(pid), &status, {})
+					}
+
+				} else {
+					fmt.printf("%s: command not found\n", parse_result.command)
+				}
 			}
 		}
 	}

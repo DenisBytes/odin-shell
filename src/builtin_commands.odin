@@ -8,13 +8,13 @@ import "core:strconv"
 import "core:strings"
 import "core:sys/posix"
 
-BUILTIN_COMMANDS := []string{"echo", "type", "pwd", "cd", "history", "exit"}
+BUILTIN_COMMANDS :: []string{"echo", "type", "pwd", "cd", "history", "exit"}
 commands_history: [dynamic]string
 last_append_index := 0
 
-Commands_Proc :: proc(args: []string, filename: string, append_file: bool)
+Builtin_Handler :: proc(args: []string, filename: string, append_file: bool)
 
-handlers := map[string]Commands_Proc {
+handlers := map[string]Builtin_Handler {
 	"echo"    = cmd_echo,
 	"type"    = cmd_type,
 	"pwd"     = cmd_pwd,
@@ -151,7 +151,7 @@ cmd_history :: proc(args: []string, filename: string, append_file: bool) {
 		} else if args[0] == "-r" {
 			if len(args) > 1 {
 
-				file_bytes, file_bytes_err := os.read_entire_file(args[1])
+				file_bytes, file_bytes_err := os.read_entire_file(args[1], context.temp_allocator)
 				if file_bytes_err != nil {
 					fmt.printf("history: parsing error: %w\n", file_bytes_err)
 				}
