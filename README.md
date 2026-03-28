@@ -2,6 +2,11 @@
 
 Implementing a zsh shell from scratch in Odin.
 
+# NOT AI SLOP
+
+AI has NOT been used to implement any piece of this code. 
+AI has been used only to review the codebase. All implementation, architecture, design, debugging, etc... has been done by a human.
+
 ## What's working so far
 
 - Builtin commands: `echo`, `type`, `pwd`, `cd`, `exit`
