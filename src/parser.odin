@@ -1,29 +1,27 @@
 package main
 
 import "base:runtime"
-import "core:fmt"
+import "core:io"
 import "core:strings"
 
-parse_input :: proc(
-	raw_input: string,
-) -> (
-	string,
-	[]string,
-	string,
-	string,
-	bool,
-	runtime.Allocator_Error,
-) {
-	input := strings.trim_left(raw_input, " ")
-	cmd_builder, raw_cmd_err := strings.builder_make_none()
-	if raw_cmd_err != nil {
-		fmt.printf("shell: error allocating in memory: %w\n", raw_cmd_err)
-		return "", []string{}, "", "", false, raw_cmd_err
+parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
+	io_err: io.Error
+	alloc_err: runtime.Allocator_Error
+	cmd_builder: strings.Builder
+	args_builder: strings.Builder
+
+	if len(raw_input) == 0 {
+		return {}, Shell_Error.Empty_Input
 	}
-	args_builder, raw_args_err := strings.builder_make_none()
-	if raw_args_err != nil {
-		fmt.printf("shell: error allocating in memory: %w\n", raw_args_err)
-		return "", []string{}, "", "", false, raw_args_err
+
+	input := strings.trim_left(raw_input, " ")
+	cmd_builder, alloc_err = strings.builder_make_none()
+	if alloc_err != nil {
+		return {}, alloc_err
+	}
+	args_builder, alloc_err = strings.builder_make_none()
+	if alloc_err != nil {
+		return {}, alloc_err
 	}
 
 	cmd := ""
@@ -32,26 +30,16 @@ parse_input :: proc(
 
 	if input[0] == '\'' {
 		for c, index in input[1:] {
-			if is_backslash {
-				is_backslash = false
-				switch c {
-				case:
-					strings.write_rune(&cmd_builder, c)
-				}
-				continue
-			}
-			if c == '\\' {
-				is_backslash = true
-				continue
-			}
 			if c == '\'' {
 				cmd = strings.to_string(cmd_builder)
 				raw_args = input[index + 2:]
 				break
 			}
 
-
-			strings.write_rune(&cmd_builder, c)
+			_, io_err = strings.write_rune(&cmd_builder, c)
+			if io_err != nil {
+				return {}, io_err
+			}
 		}
 	} else if input[0] == '"' {
 		for c, index in input[1:] {
@@ -59,7 +47,10 @@ parse_input :: proc(
 				is_backslash = false
 				switch c {
 				case:
-					strings.write_rune(&args_builder, c)
+					_, io_err = strings.write_rune(&args_builder, c)
+					if io_err != nil {
+						return {}, io_err
+					}
 				}
 				continue
 			}
@@ -72,7 +63,10 @@ parse_input :: proc(
 				raw_args = input[index + 2:]
 				break
 			}
-			strings.write_rune(&args_builder, c)
+			_, io_err = strings.write_rune(&args_builder, c)
+			if io_err != nil {
+				return {}, io_err
+			}
 		}
 	} else {
 		cmd, _, raw_args = strings.partition(input, " ")
@@ -84,10 +78,11 @@ parse_input :: proc(
 	is_backslash = false
 	args := [dynamic]string{}
 
-	arg, arg_builder_err := strings.builder_make_none()
-	if arg_builder_err != nil {
-		fmt.printf("shell: error allocating in memory: %w\n", arg_builder_err)
-		return "", []string{}, "", "", false, arg_builder_err
+	arg: strings.Builder
+
+	arg, alloc_err = strings.builder_make_none()
+	if alloc_err != nil {
+		return {}, alloc_err
 	}
 
 	stdout_filename := ""
@@ -100,13 +95,19 @@ parse_input :: proc(
 				in_single_quote = false
 				continue
 			}
-			strings.write_rune(&arg, c)
+			_, io_err = strings.write_rune(&arg, c)
+			if io_err != nil {
+				return {}, io_err
+			}
 		} else if in_double_quote {
 			if is_backslash {
 				is_backslash = false
 				switch c {
 				case:
-					strings.write_rune(&arg, c)
+					_, io_err = strings.write_rune(&arg, c)
+					if io_err != nil {
+						return {}, io_err
+					}
 				}
 				continue
 			}
@@ -119,11 +120,16 @@ parse_input :: proc(
 				continue
 			}
 
-
-			strings.write_rune(&arg, c)
+			_, io_err = strings.write_rune(&arg, c)
+			if io_err != nil {
+				return {}, io_err
+			}
 		} else {
 			if is_backslash {
-				strings.write_rune(&arg, c)
+				_, io_err = strings.write_rune(&arg, c)
+				if io_err != nil {
+					return {}, io_err
+				}
 				is_backslash = false
 				continue
 			}
@@ -176,7 +182,10 @@ parse_input :: proc(
 				break
 			}
 
-			strings.write_rune(&arg, c)
+			_, io_err = strings.write_rune(&arg, c)
+			if io_err != nil {
+				return {}, io_err
+			}
 		}
 	}
 
@@ -184,5 +193,13 @@ parse_input :: proc(
 		append(&args, strings.clone(strings.to_string(arg)))
 	}
 
-	return cmd, args[:], stdout_filename, stderr_filename, append_file, nil
+	result = {
+		command = cmd,
+		args = args[:],
+		stdout_redirect = Redirect{filename = stdout_filename, append_mode = append_file},
+		stderr_redirect = Redirect{filename = stderr_filename, append_mode = append_file},
+	}
+	err = {}
+
+	return
 }
