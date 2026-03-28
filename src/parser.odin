@@ -10,11 +10,11 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 	cmd_builder: strings.Builder
 	args_builder: strings.Builder
 
-	if len(raw_input) == 0 {
+	input := strings.trim_left(raw_input, " ")
+	if len(input) == 0 {
 		return {}, Shell_Error.Empty_Input
 	}
 
-	input := strings.trim_left(raw_input, " ")
 	cmd_builder, alloc_err = strings.builder_make_none()
 	if alloc_err != nil {
 		return {}, alloc_err
@@ -86,8 +86,9 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 	}
 
 	stdout_filename := ""
+	stdout_append := false
 	stderr_filename := ""
-	append_file := false
+	stderr_append := false
 
 	for c, index in raw_args {
 		if in_single_quote {
@@ -159,7 +160,7 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 					strings.builder_reset(&arg)
 					if raw_args[index + 1] == '>' {
 						stderr_filename = strings.trim(raw_args[index + 2:], " ")
-						append_file = true
+						stderr_append = true
 					} else {
 						stderr_filename = strings.trim(raw_args[index + 1:], " ")
 					}
@@ -167,14 +168,14 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 					strings.builder_reset(&arg)
 					if raw_args[index + 1] == '>' {
 						stdout_filename = strings.trim(raw_args[index + 2:], " ")
-						append_file = true
+						stdout_append = true
 					} else {
 						stdout_filename = strings.trim(raw_args[index + 1:], " ")
 					}
 				} else {
 					if raw_args[index + 1] == '>' {
 						stdout_filename = strings.trim(raw_args[index + 2:], " ")
-						append_file = true
+						stdout_append = true
 					} else {
 						stdout_filename = strings.trim(raw_args[index + 1:], " ")
 					}
@@ -196,8 +197,8 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 	result = {
 		command = cmd,
 		args = args[:],
-		stdout_redirect = Redirect{filename = stdout_filename, append_mode = append_file},
-		stderr_redirect = Redirect{filename = stderr_filename, append_mode = append_file},
+		stdout_redirect = Redirect{filename = stdout_filename, append_mode = stdout_append},
+		stderr_redirect = Redirect{filename = stderr_filename, append_mode = stderr_append},
 	}
 	err = {}
 
