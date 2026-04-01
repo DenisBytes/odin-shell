@@ -45,12 +45,13 @@ redirect_output :: proc(output: string, filename: string, append_file: bool) {
 	}
 }
 
-pipe_split :: proc(input: string) -> []string {
+pipe_split :: proc(input: string) -> ([]string, Error) {
 	in_single_quote := false
 	in_double_quote := false
 	is_backslash := false
 	commands := [dynamic]string{}
 	new_command_index := 0
+	skip_next := false
 
 	for c, index in input {
 		if in_single_quote {
@@ -64,6 +65,10 @@ pipe_split :: proc(input: string) -> []string {
 				continue
 			}
 		} else {
+			if skip_next {
+				skip_next = false
+				continue
+			}
 			if is_backslash {
 				is_backslash = false
 				continue
@@ -82,16 +87,32 @@ pipe_split :: proc(input: string) -> []string {
 			}
 
 			if c == '|' {
-				append(&commands, strings.trim_space(input[new_command_index:index]))
-				new_command_index = index + 1
-				continue
+				if index + 1 < len(input) && input[index + 1] == '|' {
+					skip_next = true
+					continue
+				} else {
+					trimmed := strings.trim_space(input[new_command_index:index])
+					if len(trimmed) == 0 {
+						return {}, .Parse_Error
+					} else {
+						append(&commands, trimmed)
+						new_command_index = index + 1
+						continue
+					}
+				}
 			}
 		}
 	}
 
-	append(&commands, strings.trim_space(input[new_command_index:]))
+	trimmed := strings.trim_space(input[new_command_index:])
+	if len(trimmed) == 0 {
+		return {}, .Parse_Error
+	} else {
+		append(&commands, trimmed)
+	}
 
-	return commands[:]
+
+	return commands[:], nil
 }
 
 execute_pipeline :: proc(commands: []string) {

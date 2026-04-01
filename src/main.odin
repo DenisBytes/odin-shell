@@ -155,7 +155,11 @@ main :: proc() {
 		append(&commands_history, input_clone)
 		history_index = len(commands_history)
 
-		pipe_split_commands := pipe_split(input_str)
+		pipe_split_commands, pipe_split_err := pipe_split(input_str)
+		if pipe_split_err != nil {
+			fmt.printf("zsh: parse error near `|'")
+			return
+		}
 
 		if len(pipe_split_commands) > 1 {
 			execute_pipeline(pipe_split_commands)

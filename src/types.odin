@@ -21,6 +21,7 @@ Shell_Error :: enum {
 	Pipe_Failed,
 	Redirect_Failed,
 	Exec_Failed,
+	Parse_Error,
 }
 
 Error :: union {

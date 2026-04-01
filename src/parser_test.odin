@@ -343,3 +343,128 @@ test_parse_backslash_edge_cases :: proc(t: ^testing.T) {
 	testing.expect_value(t, parse_result3.stderr_redirect.append_mode, false)
 	testing.expect(t, err3 == nil, "expected no error")
 }
+
+
+@(test)
+test_pipe_split_two :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := pipe_split("ls | head")
+
+	testing.expect_value(t, len(commands), 2)
+	testing.expect_value(t, commands[0], "ls")
+	testing.expect_value(t, commands[1], "head")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_pipe_split_three :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := pipe_split("cat f | grep foo | wc -l")
+
+	testing.expect_value(t, len(commands), 3)
+	testing.expect_value(t, commands[0], "cat f")
+	testing.expect_value(t, commands[1], "grep foo")
+	testing.expect_value(t, commands[2], "wc -l")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_pipe_single_quotes :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := pipe_split("echo 'a | b'")
+
+	testing.expect_value(t, len(commands), 1)
+	testing.expect_value(t, commands[0], "echo 'a | b'")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_pipe_double_quotes :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := pipe_split("echo \"a | b\"")
+
+	testing.expect_value(t, len(commands), 1)
+	testing.expect_value(t, commands[0], "echo \"a | b\"")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_pipe_backslash_pipe :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := pipe_split("echo a\\| b")
+
+	testing.expect_value(t, len(commands), 1)
+	testing.expect_value(t, commands[0], "echo a\\| b")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_pipe_split_space_aroung_pipe :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := pipe_split("ls | head -5")
+
+	testing.expect_value(t, len(commands), 2)
+	testing.expect_value(t, commands[0], "ls")
+	testing.expect_value(t, commands[1], "head -5")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_pipe_split_pipe_at_start :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := pipe_split("| ls")
+
+	testing.expect_value(t, len(commands), 0)
+	testing.expect_value(t, err, Shell_Error.Parse_Error)
+}
+
+
+@(test)
+test_pipe_split_consecutive_pipes :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := pipe_split("a || b")
+
+	testing.expect_value(t, len(commands), 1)
+	testing.expect_value(t, commands[0], "a || b")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_pipe_split_mixed_quotes :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := pipe_split("echo \"a'|'b\" | cat")
+
+	testing.expect_value(t, len(commands), 2)
+	testing.expect_value(t, commands[0], "echo \"a'|'b\"")
+	testing.expect_value(t, commands[1], "cat")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_pipe_split_no_spaces :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := pipe_split("ls|head")
+
+	testing.expect_value(t, len(commands), 2)
+	testing.expect_value(t, commands[0], "ls")
+	testing.expect_value(t, commands[1], "head")
+	testing.expect(t, err == nil, "expected no error")
+}
