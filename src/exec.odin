@@ -16,7 +16,7 @@ redirect_output :: proc(output: string, filename: string, append_file: bool) {
 
 	full := filename
 	if filename[0] != '/' {
-		full = strings.concatenate({pwd, "/", filename})
+		full = strings.concatenate({pwd, "/", filename}, context.temp_allocator)
 	}
 
 	file := &os.File{}
@@ -38,6 +38,7 @@ redirect_output :: proc(output: string, filename: string, append_file: bool) {
 		fmt.printf("shell: could not create or truncate file %s\n", filename)
 		return
 	}
+	defer os.close(file)
 	_, write_err := os.write_string(file, output)
 	if write_err != nil {
 		fmt.printf("shell: could not write to file %s\n", filename)
@@ -172,7 +173,7 @@ redirect_fd :: proc(fildes: posix.FD, redirect: Redirect) {
 	flags := posix.O_Flags{.WRONLY, .CREAT}
 	flags += {.APPEND} if redirect.append_mode else {.TRUNC}
 	fd := posix.open(
-		strings.clone_to_cstring(redirect.filename),
+		strings.clone_to_cstring(redirect.filename, context.temp_allocator),
 		flags,
 		{.IRUSR, .IWUSR, .IRGRP, .IROTH},
 	)
@@ -196,7 +197,7 @@ resolve_command :: proc(command: string) -> (full_path: string, found: bool, err
 	found = false
 
 	for dir in dirs {
-		full := strings.concatenate({dir, "/", command})
+		full := strings.concatenate({dir, "/", command}, context.temp_allocator)
 		if os.exists(full) {
 			stat, stat_err := os.stat(full, context.temp_allocator)
 			if stat_err != nil {

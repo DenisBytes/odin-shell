@@ -24,7 +24,7 @@ handlers := map[string]Builtin_Handler {
 }
 
 cmd_echo :: proc(args: []string, filename: string, append_file: bool) {
-	output, output_err := strings.join(args, " ")
+	output, output_err := strings.join(args, " ", context.temp_allocator)
 	if output_err != nil {
 		fmt.printf("shell: error formatting echo output: %w\n", output_err)
 	}
@@ -54,7 +54,7 @@ cmd_type :: proc(args: []string, filename: string, append_file: bool) {
 			}
 
 			outer: for dir in dirs {
-				full := strings.concatenate({dir, "/", arg})
+				full := strings.concatenate({dir, "/", arg}, context.temp_allocator)
 				if os.exists(full) {
 					stat, stat_err := os.stat(full, context.temp_allocator)
 					if stat_err != nil {
@@ -102,7 +102,7 @@ cmd_cd :: proc(args: []string, filename: string, append_file: bool) {
 			home := os.get_env_alloc("HOME", context.temp_allocator)
 			index := strings.index(args[0], "~")
 			if index != -1 {
-				path = strings.concatenate({home, args[0][index + 1:]})
+				path = strings.concatenate({home, args[0][index + 1:]}, context.temp_allocator)
 			}
 		}
 
@@ -119,11 +119,15 @@ cmd_history :: proc(args: []string, filename: string, append_file: bool) {
 	if len(args) > 0 {
 		if args[0] == "-w" {
 			if len(args) > 1 {
-				output, output_err := strings.join(commands_history[:], "\n")
+				output, output_err := strings.join(
+					commands_history[:],
+					"\n",
+					context.temp_allocator,
+				)
 				if output_err != nil {
 					fmt.printf("history: parsing error: %w\n", output_err)
 				}
-				final_output, _ := strings.concatenate({output, "\n"})
+				final_output, _ := strings.concatenate({output, "\n"}, context.temp_allocator)
 				redirect_output(final_output, args[1], false)
 
 				return
@@ -135,11 +139,15 @@ cmd_history :: proc(args: []string, filename: string, append_file: bool) {
 			}
 		} else if args[0] == "-a" {
 			if len(args) > 1 {
-				output, output_err := strings.join(commands_history[last_append_index:], "\n")
+				output, output_err := strings.join(
+					commands_history[last_append_index:],
+					"\n",
+					context.temp_allocator,
+				)
 				if output_err != nil {
 					fmt.printf("history: parsing error: %w\n", output_err)
 				}
-				final_output, _ := strings.concatenate({output, "\n"})
+				final_output, _ := strings.concatenate({output, "\n"}, context.temp_allocator)
 				redirect_output(final_output, args[1], true)
 				last_append_index = len(commands_history)
 				return
@@ -202,12 +210,16 @@ cmd_exit :: proc(args: []string, filename: string, append_file: bool) {
 
 	history_file := os.get_env_alloc("HISTFILE", context.temp_allocator)
 	if len(history_file) > 0 {
-		output, output_err := strings.join(commands_history[last_append_index:], "\n")
+		output, output_err := strings.join(
+			commands_history[last_append_index:],
+			"\n",
+			context.temp_allocator,
+		)
 		if output_err != nil {
 			fmt.printf("history: parsing error: %w\n", output_err)
 			return
 		}
-		final_output, _ := strings.concatenate({output, "\n"})
+		final_output, _ := strings.concatenate({output, "\n"}, context.temp_allocator)
 		redirect_output(final_output, history_file, true)
 
 	}

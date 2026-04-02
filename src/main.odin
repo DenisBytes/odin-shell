@@ -43,6 +43,11 @@ import "core:sys/posix"
  *    - p: search PATH for the command. execlp("ls", "ls", "-la", NULL)
  *    - e: pass custom ENVs. execve("/bin/ls", args, custom_env)
  *
+ *
+ * context.allocator vs context.temp_allocator\
+ *  allocator: the equivalent of malloc()/free() in C. you manually free each single pointer you have allocated.
+ *  temp_allocator: pre-allocates a chunk of memory where you just allocate vars, without freeing them directly. 
+ *    and at the end you just free_all() and free all that chunk of memory. This is called an Arena. 
  *  * */
 
 original_termios: posix.termios
@@ -79,6 +84,7 @@ main :: proc() {
 	history_index := len(commands_history)
 
 	for {
+		defer free_all(context.temp_allocator)
 		fmt.printf(PROMPT)
 		input_buf: [dynamic]byte
 		defer delete(input_buf)
@@ -112,10 +118,10 @@ main :: proc() {
 					fmt.printf("\b \b")
 				}
 				continue
-			// ARROW_UP
 			case '\x1b':
 				seq: [2]byte
 				os.read(os.stdin, seq[:])
+				// ARROW_UP
 				if seq[0] == '[' && seq[1] == 'A' {
 					if history_index > 0 {
 						history_index -= 1
@@ -129,6 +135,7 @@ main :: proc() {
 						append(&input_buf, ..history_bytes)
 						fmt.printf("%s", string(input_buf[:]))
 					}
+					// ARROW_DOWN
 				} else if seq[0] == '[' && seq[1] == 'B' {
 					if history_index < len(commands_history) - 1 {
 						history_index += 1
