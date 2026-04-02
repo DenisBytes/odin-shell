@@ -45,75 +45,6 @@ redirect_output :: proc(output: string, filename: string, append_file: bool) {
 	}
 }
 
-pipe_split :: proc(input: string) -> ([]string, Error) {
-	in_single_quote := false
-	in_double_quote := false
-	is_backslash := false
-	commands := [dynamic]string{}
-	new_command_index := 0
-	skip_next := false
-
-	for c, index in input {
-		if in_single_quote {
-			if c == '\'' {
-				in_single_quote = false
-				continue
-			}
-		} else if in_double_quote {
-			if c == '"' {
-				in_double_quote = false
-				continue
-			}
-		} else {
-			if skip_next {
-				skip_next = false
-				continue
-			}
-			if is_backslash {
-				is_backslash = false
-				continue
-			}
-			if c == '\\' {
-				is_backslash = true
-				continue
-			}
-			if c == '"' {
-				in_double_quote = true
-				continue
-			}
-			if c == '\'' {
-				in_single_quote = true
-				continue
-			}
-
-			if c == '|' {
-				if index + 1 < len(input) && input[index + 1] == '|' {
-					skip_next = true
-					continue
-				} else {
-					trimmed := strings.trim_space(input[new_command_index:index])
-					if len(trimmed) == 0 {
-						return {}, .Parse_Error
-					} else {
-						append(&commands, trimmed)
-						new_command_index = index + 1
-						continue
-					}
-				}
-			}
-		}
-	}
-
-	trimmed := strings.trim_space(input[new_command_index:])
-	if len(trimmed) == 0 {
-		return {}, .Parse_Error
-	} else {
-		append(&commands, trimmed)
-	}
-
-
-	return commands[:], nil
-}
 
 execute_pipeline :: proc(commands: []string) {
 	prev_read_fd := -1
@@ -193,18 +124,14 @@ execute_pipeline :: proc(commands: []string) {
 
 				full_path, found, err := resolve_command(parse_result.command)
 				if err != nil {
-					switch e in err {
+					#partial switch e in err {
 					case Shell_Error:
 						#partial switch e {
 						case .Empty_Input:
 							continue
-						case:
-							fmt.printf("shell: error: %v", err)
 						}
 					case runtime.Allocator_Error:
 						fmt.printf("shell: alloc error: %v", err)
-					case io.Error:
-						fmt.printf("shell: io error: %v", err)
 					}
 				}
 
@@ -256,12 +183,14 @@ redirect_fd :: proc(fildes: posix.FD, redirect: Redirect) {
 
 
 resolve_command :: proc(command: string) -> (full_path: string, found: bool, err: Error) {
-	dirs: []string
+	if len(command) == 0 {
+		return "", false, .Empty_Input
+	}
 
 	path := os.get_env_alloc("PATH", context.temp_allocator)
-	dirs, err = strings.split(path, ":")
-	if err != nil {
-		return "", false, err
+	dirs, split_err := strings.split(path, ":")
+	if split_err != nil {
+		return "", false, split_err
 	}
 
 	found = false
@@ -269,10 +198,10 @@ resolve_command :: proc(command: string) -> (full_path: string, found: bool, err
 	for dir in dirs {
 		full := strings.concatenate({dir, "/", command})
 		if os.exists(full) {
-			found = true
 			stat, stat_err := os.stat(full, context.temp_allocator)
 			if stat_err != nil {
-				return "", false, err
+				// just continue. zsh doesn't show error for broken path
+				continue
 			}
 
 			if os.Permission_Flag.Execute_User in stat.mode {
