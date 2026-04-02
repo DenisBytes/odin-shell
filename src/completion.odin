@@ -160,6 +160,8 @@ collect_file_matches :: proc(
 			}
 		}
 	}
+
+	return
 }
 
 
@@ -214,7 +216,12 @@ apply_completion :: proc(
 		// display all matches
 		if tab_count >= 2 {
 			slice.sort(display_matches[:])
-			fmt.printf("\n%s\n%s%s", strings.join(display_matches[:], "  "), PROMPT, prefix)
+			fmt.printf(
+				"\n%s\n%s%s",
+				strings.join(display_matches[:], "  "),
+				PROMPT,
+				string(input_buf^[:]),
+			)
 			fmt.printf("\r%s%s", PROMPT, string(input_buf^[:]))
 		}
 	}
