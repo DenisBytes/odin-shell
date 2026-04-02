@@ -204,3 +204,74 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 
 	return
 }
+
+
+pipe_split :: proc(input: string) -> ([]string, Error) {
+	in_single_quote := false
+	in_double_quote := false
+	is_backslash := false
+	commands := [dynamic]string{}
+	new_command_index := 0
+	skip_next := false
+
+	for c, index in input {
+		if in_single_quote {
+			if c == '\'' {
+				in_single_quote = false
+				continue
+			}
+		} else if in_double_quote {
+			if c == '"' {
+				in_double_quote = false
+				continue
+			}
+		} else {
+			if skip_next {
+				skip_next = false
+				continue
+			}
+			if is_backslash {
+				is_backslash = false
+				continue
+			}
+			if c == '\\' {
+				is_backslash = true
+				continue
+			}
+			if c == '"' {
+				in_double_quote = true
+				continue
+			}
+			if c == '\'' {
+				in_single_quote = true
+				continue
+			}
+
+			if c == '|' {
+				if index + 1 < len(input) && input[index + 1] == '|' {
+					skip_next = true
+					continue
+				} else {
+					trimmed := strings.trim_space(input[new_command_index:index])
+					if len(trimmed) == 0 {
+						return {}, .Parse_Error
+					} else {
+						append(&commands, trimmed)
+						new_command_index = index + 1
+						continue
+					}
+				}
+			}
+		}
+	}
+
+	trimmed := strings.trim_space(input[new_command_index:])
+	if len(trimmed) == 0 {
+		return {}, .Parse_Error
+	} else {
+		append(&commands, trimmed)
+	}
+
+
+	return commands[:], nil
+}
