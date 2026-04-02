@@ -12,7 +12,7 @@ BUILTIN_COMMANDS :: []string{"echo", "type", "pwd", "cd", "history", "exit"}
 commands_history: [dynamic]string
 last_append_index := 0
 
-Builtin_Handler :: proc(args: []string, filename: string, append_file: bool)
+Builtin_Handler :: proc(args: []string, redirect: Redirect)
 
 handlers := map[string]Builtin_Handler {
 	"echo"    = cmd_echo,
@@ -23,26 +23,26 @@ handlers := map[string]Builtin_Handler {
 	"exit"    = cmd_exit,
 }
 
-cmd_echo :: proc(args: []string, filename: string, append_file: bool) {
+cmd_echo :: proc(args: []string, redirect: Redirect) {
 	output, output_err := strings.join(args, " ", context.temp_allocator)
 	if output_err != nil {
 		fmt.printf("shell: error formatting echo output: %w\n", output_err)
 	}
 
-	if filename == "" {
+	if redirect.filename == "" {
 		fmt.printf("%s\n", output)
 	} else {
-		redirect_output(fmt.tprintf("%s\n", output), filename, append_file)
+		redirect_output(fmt.tprintf("%s\n", output), redirect)
 	}
 }
 
-cmd_type :: proc(args: []string, filename: string, append_file: bool) {
+cmd_type :: proc(args: []string, redirect: Redirect) {
 	for arg in args {
 		if arg in handlers {
-			if filename == "" {
+			if redirect.filename == "" {
 				fmt.printf("%s is a shell builtin\n", arg)
 			} else {
-				redirect_output(fmt.tprintf("%s is a shell builtin\n", arg), filename, append_file)
+				redirect_output(fmt.tprintf("%s is a shell builtin\n", arg), redirect)
 			}
 
 		} else {
@@ -62,14 +62,10 @@ cmd_type :: proc(args: []string, filename: string, append_file: bool) {
 					}
 
 					if os.Permission_Flag.Execute_User in stat.mode {
-						if filename == "" {
+						if redirect.filename == "" {
 							fmt.printf("%s is %s\n", arg, full)
 						} else {
-							redirect_output(
-								fmt.tprintf("%s is %s\n", arg, full),
-								filename,
-								append_file,
-							)
+							redirect_output(fmt.tprintf("%s is %s\n", arg, full), redirect)
 						}
 						break outer
 					}
@@ -80,20 +76,20 @@ cmd_type :: proc(args: []string, filename: string, append_file: bool) {
 	}
 }
 
-cmd_pwd :: proc(args: []string, filename: string, append_file: bool) {
+cmd_pwd :: proc(args: []string, redirect: Redirect) {
 	pwd, pwd_err := os.get_working_directory(context.temp_allocator)
 	if pwd_err != nil {
 		fmt.printf("pwd: %w\n", pwd_err)
 	}
 
-	if filename == "" {
+	if redirect.filename == "" {
 		fmt.printf("%s\n", pwd)
 	} else {
-		redirect_output(fmt.tprintf("%s\n", pwd), filename, append_file)
+		redirect_output(fmt.tprintf("%s\n", pwd), redirect)
 	}
 }
 
-cmd_cd :: proc(args: []string, filename: string, append_file: bool) {
+cmd_cd :: proc(args: []string, redirect: Redirect) {
 	if len(args) > 1 {
 		fmt.print("cd: Too many arguments\n")
 	} else {
@@ -113,7 +109,7 @@ cmd_cd :: proc(args: []string, filename: string, append_file: bool) {
 	}
 }
 
-cmd_history :: proc(args: []string, filename: string, append_file: bool) {
+cmd_history :: proc(args: []string, redirect: Redirect) {
 	starting_index := 0
 	history_filename := ""
 	if len(args) > 0 {
@@ -128,7 +124,7 @@ cmd_history :: proc(args: []string, filename: string, append_file: bool) {
 					fmt.printf("history: parsing error: %w\n", output_err)
 				}
 				final_output, _ := strings.concatenate({output, "\n"}, context.temp_allocator)
-				redirect_output(final_output, args[1], false)
+				redirect_output(final_output, Redirect{filename = args[1], append_mode = false})
 
 				return
 			} else {
@@ -148,7 +144,7 @@ cmd_history :: proc(args: []string, filename: string, append_file: bool) {
 					fmt.printf("history: parsing error: %w\n", output_err)
 				}
 				final_output, _ := strings.concatenate({output, "\n"}, context.temp_allocator)
-				redirect_output(final_output, args[1], true)
+				redirect_output(final_output, Redirect{filename = args[1], append_mode = true})
 				last_append_index = len(commands_history)
 				return
 			} else {
@@ -197,16 +193,16 @@ cmd_history :: proc(args: []string, filename: string, append_file: bool) {
 		for _ in 0 ..< padding {
 			fmt.printf(" ")
 		}
-		if filename == "" {
+		if redirect.filename == "" {
 			fmt.printf("%s  %s\n", num_str, commands_history[i])
 		} else {
 			line := fmt.tprintf("%s  %s\n", num_str, commands_history[i])
-			redirect_output(line, filename, append_file)
+			redirect_output(line, redirect)
 		}
 	}
 }
 
-cmd_exit :: proc(args: []string, filename: string, append_file: bool) {
+cmd_exit :: proc(args: []string, redirect: Redirect) {
 
 	history_file := os.get_env_alloc("HISTFILE", context.temp_allocator)
 	if len(history_file) > 0 {
@@ -220,7 +216,7 @@ cmd_exit :: proc(args: []string, filename: string, append_file: bool) {
 			return
 		}
 		final_output, _ := strings.concatenate({output, "\n"}, context.temp_allocator)
-		redirect_output(final_output, history_file, true)
+		redirect_output(final_output, Redirect{filename = history_file, append_mode = true})
 
 	}
 	posix.tcsetattr(posix.FD(c.int(0)), .TCSANOW, &original_termios)

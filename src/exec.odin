@@ -8,40 +8,40 @@ import "core:os"
 import "core:strings"
 import "core:sys/posix"
 
-redirect_output :: proc(output: string, filename: string, append_file: bool) {
+redirect_output :: proc(output: string, redirect: Redirect) {
 	pwd, pwd_err := os.get_working_directory(context.temp_allocator)
 	if pwd_err != nil {
 		fmt.printf("shell: could not read current working directory %w\n", pwd_err)
 	}
 
-	full := filename
-	if filename[0] != '/' {
-		full = strings.concatenate({pwd, "/", filename}, context.temp_allocator)
+	full := redirect.filename
+	if redirect.filename[0] != '/' {
+		full = strings.concatenate({pwd, "/", redirect.filename}, context.temp_allocator)
 	}
 
 	file := &os.File{}
 	file_err := os.Error{}
-	if append_file {
+	if redirect.append_mode {
 		file, file_err = os.open(
-			filename,
+			redirect.filename,
 			os.O_WRONLY | os.O_CREATE | os.O_APPEND,
 			{.Read_User, .Write_User, .Read_Group, .Read_Other},
 		)
 	} else {
 		file, file_err = os.open(
-			filename,
+			redirect.filename,
 			os.O_WRONLY | os.O_CREATE | os.O_TRUNC,
 			{.Read_User, .Write_User, .Read_Group, .Read_Other},
 		)
 	}
 	if file_err != nil {
-		fmt.printf("shell: could not create or truncate file %s\n", filename)
+		fmt.printf("shell: could not create or truncate file %s\n", redirect.filename)
 		return
 	}
 	defer os.close(file)
 	_, write_err := os.write_string(file, output)
 	if write_err != nil {
-		fmt.printf("shell: could not write to file %s\n", filename)
+		fmt.printf("shell: could not write to file %s\n", redirect.filename)
 		return
 	}
 }
@@ -106,17 +106,9 @@ execute_pipeline :: proc(commands: []string) {
 			}
 
 			if handler, ok := handlers[parse_result.command]; ok {
-				handler(
-					parse_result.args,
-					parse_result.stdout_redirect.filename,
-					parse_result.stdout_redirect.append_mode,
-				)
+				handler(parse_result.args, parse_result.stdout_redirect)
 				if len(parse_result.stderr_redirect.filename) > 0 {
-					redirect_output(
-						"",
-						parse_result.stderr_redirect.filename,
-						parse_result.stderr_redirect.append_mode,
-					)
+					redirect_output("", parse_result.stderr_redirect)
 				}
 
 				posix.exit(0)

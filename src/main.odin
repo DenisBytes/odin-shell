@@ -190,17 +190,9 @@ main :: proc() {
 
 			if handler, ok := handlers[parse_result.command]; ok {
 
-				handler(
-					parse_result.args,
-					parse_result.stdout_redirect.filename,
-					parse_result.stdout_redirect.append_mode,
-				)
+				handler(parse_result.args, parse_result.stdout_redirect)
 				if len(parse_result.stderr_redirect.filename) > 0 {
-					redirect_output(
-						"",
-						parse_result.stderr_redirect.filename,
-						parse_result.stderr_redirect.append_mode,
-					)
+					redirect_output("", parse_result.stderr_redirect)
 				}
 
 			} else {

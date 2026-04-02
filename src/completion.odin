@@ -148,7 +148,6 @@ collect_file_matches :: proc(
 		return
 	}
 
-
 	for entry in entries {
 		if strings.has_prefix(entry.name, file_prefix) {
 			if entry.type == .Directory {
