@@ -47,31 +47,16 @@ cmd_type :: proc(args: []string, redirect: Redirect) {
 
 		} else {
 
-			path := os.get_env_alloc("PATH", context.temp_allocator)
-			dirs, split_path_err := strings.split(path, ":")
-			if split_path_err != nil {
-				fmt.printf("type: error splitting PATH: %w\n", split_path_err)
-			}
-
-			outer: for dir in dirs {
-				full := strings.concatenate({dir, "/", arg}, context.temp_allocator)
-				if os.exists(full) {
-					stat, stat_err := os.stat(full, context.temp_allocator)
-					if stat_err != nil {
-						fmt.printf("type: error reading file stat: %w\n", stat_err)
-					}
-
-					if os.Permission_Flag.Execute_User in stat.mode {
-						if redirect.filename == "" {
-							fmt.printf("%s is %s\n", arg, full)
-						} else {
-							redirect_output(fmt.tprintf("%s is %s\n", arg, full), redirect)
-						}
-						break outer
-					}
+			path, found, _ := resolve_command(arg)
+			if found {
+				if redirect.filename == "" {
+					fmt.printf("%s is %s\n", arg, path)
+				} else {
+					redirect_output(fmt.tprintf("%s is %s\n", arg, path), redirect)
 				}
+			} else {
+				fmt.printf("%s: not found\n", arg)
 			}
-			fmt.printf("%s: not found\n", arg)
 		}
 	}
 }
