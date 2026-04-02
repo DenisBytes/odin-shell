@@ -200,18 +200,14 @@ main :: proc() {
 
 				full_path, found, err := resolve_command(parse_result.command)
 				if err != nil {
-					switch e in err {
+					#partial switch e in err {
 					case Shell_Error:
 						#partial switch e {
 						case .Empty_Input:
 							continue
-						case:
-							fmt.printf("shell: error: %v", err)
 						}
 					case runtime.Allocator_Error:
 						fmt.printf("shell: alloc error: %v", err)
-					case io.Error:
-						fmt.printf("shell: io error: %v", err)
 					}
 				}
 
