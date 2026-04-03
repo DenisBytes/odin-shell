@@ -4,7 +4,6 @@ package main
 import "core:c"
 import "core:fmt"
 import "core:os"
-import "core:strconv"
 import "core:strings"
 import "core:sys/posix"
 
@@ -78,18 +77,26 @@ cmd_cd :: proc(args: []string, redirect: Redirect) {
 	if len(args) > 1 {
 		fmt.print("cd: Too many arguments\n")
 	} else {
-		path := args[0]
-		if strings.has_prefix(args[0], "~") {
+		if len(args) == 0 {
 			home := os.get_env_alloc("HOME", context.temp_allocator)
-			index := strings.index(args[0], "~")
-			if index != -1 {
-				path = strings.concatenate({home, args[0][index + 1:]}, context.temp_allocator)
+			cd_err := os.change_directory(home)
+			if cd_err != nil {
+				fmt.printf("cd: %s: No such file or directory\n", home)
 			}
-		}
+		} else {
+			path := args[0]
+			if strings.has_prefix(args[0], "~") {
+				home := os.get_env_alloc("HOME", context.temp_allocator)
+				index := strings.index(args[0], "~")
+				if index != -1 {
+					path = strings.concatenate({home, args[0][index + 1:]}, context.temp_allocator)
+				}
+			}
 
-		cd_err := os.change_directory(path)
-		if cd_err != nil {
-			fmt.printf("cd: %s: No such file or directory\n", path)
+			cd_err := os.change_directory(path)
+			if cd_err != nil {
+				fmt.printf("cd: %s: No such file or directory\n", path)
+			}
 		}
 	}
 }
@@ -99,72 +106,89 @@ cmd_history :: proc(args: []string, redirect: Redirect) {
 	history_filename := ""
 	if len(args) > 0 {
 		if args[0] == "-w" {
-			if len(args) > 1 {
-				output, output_err := strings.join(
-					commands_history[:],
-					"\n",
-					context.temp_allocator,
-				)
-				if output_err != nil {
-					fmt.printf("history: parsing error: %w\n", output_err)
-				}
-				final_output, _ := strings.concatenate({output, "\n"}, context.temp_allocator)
-				redirect_output(final_output, Redirect{filename = args[1], append_mode = false})
-
+			output, output_err := strings.join(commands_history[:], "\n", context.temp_allocator)
+			if output_err != nil {
+				fmt.printf("history: parsing error: %w\n", output_err)
 				return
-			} else {
-				arg, ok := strconv.parse_int(args[0], 10)
-				if ok {
-					starting_index = len(commands_history) - arg
-				}
 			}
-		} else if args[0] == "-a" {
+
+			filename := ""
 			if len(args) > 1 {
-				output, output_err := strings.join(
-					commands_history[last_append_index:],
-					"\n",
-					context.temp_allocator,
-				)
-				if output_err != nil {
-					fmt.printf("history: parsing error: %w\n", output_err)
-				}
-				final_output, _ := strings.concatenate({output, "\n"}, context.temp_allocator)
-				redirect_output(final_output, Redirect{filename = args[1], append_mode = true})
-				last_append_index = len(commands_history)
-				return
+				filename = args[1]
 			} else {
-				arg, ok := strconv.parse_int(args[0], 10)
-				if ok {
-					starting_index = len(commands_history) - arg
-				}
-			}
-		} else if args[0] == "-r" {
-			if len(args) > 1 {
-
-				file_bytes, file_bytes_err := os.read_entire_file(args[1], context.temp_allocator)
-				if file_bytes_err != nil {
-					fmt.printf("history: parsing error: %w\n", file_bytes_err)
-				}
-
-				history_commands, history_commands_err := strings.split(
-					string(file_bytes[:]),
-					"\n",
-				)
-				if history_commands_err != nil {
-					fmt.printf("history: parsing error: %w\n", history_commands_err)
+				history_file := os.get_env_alloc("HISTFILE", context.temp_allocator)
+				if len(history_file) <= 0 {
+					fmt.printf("history: HISTFILE not set\n")
 					return
+				} else {
+					filename = history_file
 				}
+			}
 
-				for c in history_commands {
-					if len(c) != 0 {
-						append(&commands_history, strings.clone(c))
-					}
-				}
-				return
-			} else {
-				fmt.printf("history: -r filename argument missing\n")
+			final_output, _ := strings.concatenate({output, "\n"}, context.temp_allocator)
+			redirect_output(final_output, Redirect{filename = filename, append_mode = false})
+			last_append_index = len(commands_history)
+			return
+		} else if args[0] == "-a" {
+			output, output_err := strings.join(
+				commands_history[last_append_index:],
+				"\n",
+				context.temp_allocator,
+			)
+			if output_err != nil {
+				fmt.printf("history: parsing error: %w\n", output_err)
 				return
 			}
+			final_output, _ := strings.concatenate({output, "\n"}, context.temp_allocator)
+			filename := ""
+			if len(args) > 1 {
+				filename = args[1]
+			} else {
+				history_file := os.get_env_alloc("HISTFILE", context.temp_allocator)
+				if len(history_file) <= 0 {
+					fmt.printf("history: HISTFILE not set\n")
+					return
+				} else {
+					filename = history_file
+				}
+			}
+			redirect_output(final_output, Redirect{filename = filename, append_mode = true})
+			last_append_index = len(commands_histor)
+			return
+		} else if args[0] == "-r" {
+
+			filename := ""
+			if len(args) > 1 {
+				filename = args[1]
+			} else {
+				history_file := os.get_env_alloc("HISTFILE", context.temp_allocator)
+				if len(history_file) <= 0 {
+					fmt.printf("history: HISTFILE not set\n")
+					return
+				} else {
+					filename = history_file
+				}
+			}
+
+			file_bytes, file_bytes_err := os.read_entire_file(filename, context.temp_allocator)
+			if file_bytes_err != nil {
+				fmt.printf("history: parsing error: %w\n", file_bytes_err)
+				return
+			}
+
+			history_commands, history_commands_err := strings.split(string(file_bytes[:]), "\n")
+			if history_commands_err != nil {
+				fmt.printf("history: parsing error: %w\n", history_commands_err)
+				return
+			}
+
+			for c in history_commands {
+				if len(c) != 0 {
+					append(&commands_history, strings.clone(c))
+				}
+			}
+			last_append_index = len(commands_history)
+			return
 		} else {
 			arg, ok := strconv.parse_int(args[0], 10)
 			if ok {

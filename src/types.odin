@@ -4,7 +4,7 @@ import "base:runtime"
 import "core:io"
 
 // %% is escape sequence to print % in fmt.printf
-PROMPT :: "%% "
+PROMPT :: "% "
 
 Parse_Result :: struct {
 	command:         string,

@@ -85,7 +85,7 @@ main :: proc() {
 
 	for {
 		defer free_all(context.temp_allocator)
-		fmt.printf(PROMPT)
+		fmt.printf("%s", PROMPT)
 		input_buf: [dynamic]byte
 		defer delete(input_buf)
 

@@ -232,9 +232,9 @@ exec_external :: proc(full_path: string, parse_result: Parse_Result) -> (err: Er
 	}
 	c_cmd := make([dynamic]cstring, context.temp_allocator)
 	for s in cmd {
-		c_s, err = strings.clone_to_cstring(s, context.temp_allocator)
-		if err != nil {
-			fmt.printf("shell: error executing command: %w\n", err)
+		c_s, clone_err := strings.clone_to_cstring(s, context.temp_allocator)
+		if clone_err != nil {
+			fmt.printf("shell: error executing command: %w\n", clone_err)
 		}
 		append(&c_cmd, c_s)
 	}
