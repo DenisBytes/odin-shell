@@ -223,12 +223,18 @@ main :: proc() {
 							return
 						}
 					case:
-						status: i32
+						status: c.int
 						posix.waitpid(posix.pid_t(pid), &status, {})
+						if posix.WIFEXITED(status) {
+							last_exit_code = i32(posix.WEXITSTATUS(status))
+						} else if posix.WIFSIGNALED(status) {
+							last_exit_code = 128 + i32(posix.WTERMSIG(status))
+						}
 					}
 
 				} else {
 					fmt.printf("%s: command not found\n", parse_result.command)
+					last_exit_code = 127
 				}
 			}
 		}

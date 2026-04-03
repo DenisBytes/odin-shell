@@ -136,6 +136,7 @@ execute_pipeline :: proc(commands: []string) {
 					}
 				} else {
 					fmt.printf("%s: command not found\n", parse_result.command)
+					last_exit_code = 127
 				}
 			}
 
@@ -155,9 +156,18 @@ execute_pipeline :: proc(commands: []string) {
 		}
 	}
 
-	for pid in pids {
-		status: i32
-		posix.waitpid(posix.pid_t(pid), &status, {})
+	for i in 0 ..< len(pids) {
+		status: c.int
+		posix.waitpid(pids[i], &status, {})
+
+		// process only last command status code
+		if i == len(pids) - 1 {
+			if posix.WIFEXITED(status) {
+				last_exit_code = i32(posix.WEXITSTATUS(status))
+			} else if posix.WIFSIGNALED(status) {
+				last_exit_code = 128 + i32(posix.WTERMSIG(status))
+			}
+		}
 	}
 }
 
