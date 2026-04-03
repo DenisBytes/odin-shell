@@ -4,6 +4,7 @@ package main
 import "core:c"
 import "core:fmt"
 import "core:os"
+import "core:strconv"
 import "core:strings"
 import "core:sys/posix"
 
@@ -11,7 +12,7 @@ BUILTIN_COMMANDS :: []string{"echo", "type", "pwd", "cd", "history", "exit"}
 commands_history: [dynamic]string
 last_append_index := 0
 
-Builtin_Handler :: proc(args: []string, redirect: Redirect)
+Builtin_Handler :: proc(args: []string, redirect: Redirect) -> i32
 
 handlers := map[string]Builtin_Handler {
 	"echo"    = cmd_echo,
@@ -22,10 +23,11 @@ handlers := map[string]Builtin_Handler {
 	"exit"    = cmd_exit,
 }
 
-cmd_echo :: proc(args: []string, redirect: Redirect) {
+cmd_echo :: proc(args: []string, redirect: Redirect) -> i32 {
 	output, output_err := strings.join(args, " ", context.temp_allocator)
 	if output_err != nil {
-		fmt.printf("shell: error formatting echo output: %w\n", output_err)
+		// fmt.printf("%s: error formatting echo output: %w\n", SHELL_NAME, output_err)
+		return 1
 	}
 
 	if redirect.filename == "" {
@@ -33,9 +35,10 @@ cmd_echo :: proc(args: []string, redirect: Redirect) {
 	} else {
 		redirect_output(fmt.tprintf("%s\n", output), redirect)
 	}
+	return 0
 }
 
-cmd_type :: proc(args: []string, redirect: Redirect) {
+cmd_type :: proc(args: []string, redirect: Redirect) -> i32 {
 	for arg in args {
 		if arg in handlers {
 			if redirect.filename == "" {
@@ -43,9 +46,7 @@ cmd_type :: proc(args: []string, redirect: Redirect) {
 			} else {
 				redirect_output(fmt.tprintf("%s is a shell builtin\n", arg), redirect)
 			}
-
 		} else {
-
 			path, found, _ := resolve_command(arg)
 			if found {
 				if redirect.filename == "" {
@@ -58,12 +59,14 @@ cmd_type :: proc(args: []string, redirect: Redirect) {
 			}
 		}
 	}
+	return 0
 }
 
-cmd_pwd :: proc(args: []string, redirect: Redirect) {
+cmd_pwd :: proc(args: []string, redirect: Redirect) -> i32 {
 	pwd, pwd_err := os.get_working_directory(context.temp_allocator)
 	if pwd_err != nil {
-		fmt.printf("pwd: %w\n", pwd_err)
+		fmt.printf("%s: %w\n", SHELL_NAME, pwd_err)
+		return 1
 	}
 
 	if redirect.filename == "" {
@@ -71,18 +74,22 @@ cmd_pwd :: proc(args: []string, redirect: Redirect) {
 	} else {
 		redirect_output(fmt.tprintf("%s\n", pwd), redirect)
 	}
+	return 0
 }
 
-cmd_cd :: proc(args: []string, redirect: Redirect) {
+cmd_cd :: proc(args: []string, redirect: Redirect) -> i32 {
 	if len(args) > 1 {
 		fmt.print("cd: Too many arguments\n")
+		return 1
 	} else {
 		if len(args) == 0 {
 			home := os.get_env_alloc("HOME", context.temp_allocator)
 			cd_err := os.change_directory(home)
 			if cd_err != nil {
 				fmt.printf("cd: %s: No such file or directory\n", home)
+				return 1
 			}
+			return 0
 		} else {
 			path := args[0]
 			if strings.has_prefix(args[0], "~") {
@@ -96,12 +103,14 @@ cmd_cd :: proc(args: []string, redirect: Redirect) {
 			cd_err := os.change_directory(path)
 			if cd_err != nil {
 				fmt.printf("cd: %s: No such file or directory\n", path)
+				return 1
 			}
+			return 0
 		}
 	}
 }
 
-cmd_history :: proc(args: []string, redirect: Redirect) {
+cmd_history :: proc(args: []string, redirect: Redirect) -> i32 {
 	starting_index := 0
 	history_filename := ""
 	if len(args) > 0 {
@@ -109,7 +118,7 @@ cmd_history :: proc(args: []string, redirect: Redirect) {
 			output, output_err := strings.join(commands_history[:], "\n", context.temp_allocator)
 			if output_err != nil {
 				fmt.printf("history: parsing error: %w\n", output_err)
-				return
+				return 1
 			}
 
 			filename := ""
@@ -119,7 +128,7 @@ cmd_history :: proc(args: []string, redirect: Redirect) {
 				history_file := os.get_env_alloc("HISTFILE", context.temp_allocator)
 				if len(history_file) <= 0 {
 					fmt.printf("history: HISTFILE not set\n")
-					return
+					return 0
 				} else {
 					filename = history_file
 				}
@@ -128,7 +137,7 @@ cmd_history :: proc(args: []string, redirect: Redirect) {
 			final_output, _ := strings.concatenate({output, "\n"}, context.temp_allocator)
 			redirect_output(final_output, Redirect{filename = filename, append_mode = false})
 			last_append_index = len(commands_history)
-			return
+			return 1
 		} else if args[0] == "-a" {
 			output, output_err := strings.join(
 				commands_history[last_append_index:],
@@ -137,7 +146,7 @@ cmd_history :: proc(args: []string, redirect: Redirect) {
 			)
 			if output_err != nil {
 				fmt.printf("history: parsing error: %w\n", output_err)
-				return
+				return 0
 			}
 			final_output, _ := strings.concatenate({output, "\n"}, context.temp_allocator)
 			filename := ""
@@ -147,14 +156,14 @@ cmd_history :: proc(args: []string, redirect: Redirect) {
 				history_file := os.get_env_alloc("HISTFILE", context.temp_allocator)
 				if len(history_file) <= 0 {
 					fmt.printf("history: HISTFILE not set\n")
-					return
+					return 0
 				} else {
 					filename = history_file
 				}
 			}
 			redirect_output(final_output, Redirect{filename = filename, append_mode = true})
-			last_append_index = len(commands_histor)
-			return
+			last_append_index = len(commands_history)
+			return 1
 		} else if args[0] == "-r" {
 
 			filename := ""
@@ -164,7 +173,7 @@ cmd_history :: proc(args: []string, redirect: Redirect) {
 				history_file := os.get_env_alloc("HISTFILE", context.temp_allocator)
 				if len(history_file) <= 0 {
 					fmt.printf("history: HISTFILE not set\n")
-					return
+					return 0
 				} else {
 					filename = history_file
 				}
@@ -173,13 +182,13 @@ cmd_history :: proc(args: []string, redirect: Redirect) {
 			file_bytes, file_bytes_err := os.read_entire_file(filename, context.temp_allocator)
 			if file_bytes_err != nil {
 				fmt.printf("history: parsing error: %w\n", file_bytes_err)
-				return
+				return 0
 			}
 
 			history_commands, history_commands_err := strings.split(string(file_bytes[:]), "\n")
 			if history_commands_err != nil {
 				fmt.printf("history: parsing error: %w\n", history_commands_err)
-				return
+				return 0
 			}
 
 			for c in history_commands {
@@ -188,7 +197,7 @@ cmd_history :: proc(args: []string, redirect: Redirect) {
 				}
 			}
 			last_append_index = len(commands_history)
-			return
+			return 1
 		} else {
 			arg, ok := strconv.parse_int(args[0], 10)
 			if ok {
@@ -196,6 +205,7 @@ cmd_history :: proc(args: []string, redirect: Redirect) {
 			}
 		}
 	}
+
 	for i in starting_index ..< len(commands_history) {
 		num_str := fmt.tprintf("%d", i + 1)
 		padding := 5 - len(num_str)
@@ -209,10 +219,10 @@ cmd_history :: proc(args: []string, redirect: Redirect) {
 			redirect_output(line, redirect)
 		}
 	}
+	return 0
 }
 
-cmd_exit :: proc(args: []string, redirect: Redirect) {
-
+cmd_exit :: proc(args: []string, redirect: Redirect) -> i32 {
 	history_file := os.get_env_alloc("HISTFILE", context.temp_allocator)
 	if len(history_file) > 0 {
 		output, output_err := strings.join(
@@ -222,7 +232,7 @@ cmd_exit :: proc(args: []string, redirect: Redirect) {
 		)
 		if output_err != nil {
 			fmt.printf("history: parsing error: %w\n", output_err)
-			return
+			return 1
 		}
 		final_output, _ := strings.concatenate({output, "\n"}, context.temp_allocator)
 		redirect_output(final_output, Redirect{filename = history_file, append_mode = true})

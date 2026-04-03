@@ -106,12 +106,12 @@ execute_pipeline :: proc(commands: []string) {
 			}
 
 			if handler, ok := handlers[parse_result.command]; ok {
-				handler(parse_result.args, parse_result.stdout_redirect)
+				last_exit_code = handler(parse_result.args, parse_result.stdout_redirect)
 				if len(parse_result.stderr_redirect.filename) > 0 {
 					redirect_output("", parse_result.stderr_redirect)
 				}
 
-				posix.exit(0)
+				posix.exit(last_exit_code)
 
 			} else {
 

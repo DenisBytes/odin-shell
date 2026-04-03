@@ -3,7 +3,7 @@ package main
 import "base:runtime"
 import "core:io"
 
-// %% is escape sequence to print % in fmt.printf
+SHELL_NAME :: "zsh"
 PROMPT :: "% "
 
 Parse_Result :: struct {
