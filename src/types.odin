@@ -9,6 +9,7 @@ PROMPT :: "% "
 Parse_Result :: struct {
 	command:         string,
 	args:            []string,
+	stdin_redirect:  Redirect,
 	stdout_redirect: Redirect,
 	stderr_redirect: Redirect,
 }

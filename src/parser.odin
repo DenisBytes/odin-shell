@@ -88,6 +88,7 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 		return {}, alloc_err
 	}
 
+	stdin_filename := ""
 	stdout_filename := ""
 	stdout_append := false
 	stderr_filename := ""
@@ -162,27 +163,96 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 				if strings.to_string(arg) == "2" {
 					strings.builder_reset(&arg)
 					if raw_args[index + 1] == '>' {
-						stderr_filename = strings.trim(raw_args[index + 2:], " ")
+						remaining := strings.trim(raw_args[index + 2:], " ")
+						first_word, split_err := strings.split(
+							remaining,
+							" ",
+							context.temp_allocator,
+						)
+						if split_err != nil {
+							return {}, split_err
+						}
+						stderr_filename = strings.trim(first_word[0], " ")
 						stderr_append = true
 					} else {
-						stderr_filename = strings.trim(raw_args[index + 1:], " ")
+						remaining := strings.trim(raw_args[index + 1:], " ")
+						first_word, split_err := strings.split(
+							remaining,
+							" ",
+							context.temp_allocator,
+						)
+						if split_err != nil {
+							return {}, split_err
+						}
+						stderr_filename = strings.trim(first_word[0], " ")
 					}
 				} else if strings.to_string(arg) == "1" {
 					strings.builder_reset(&arg)
 					if raw_args[index + 1] == '>' {
-						stdout_filename = strings.trim(raw_args[index + 2:], " ")
+						remaining := strings.trim(raw_args[index + 2:], " ")
+						first_word, split_err := strings.split(
+							remaining,
+							" ",
+							context.temp_allocator,
+						)
+						if split_err != nil {
+							return {}, split_err
+						}
+						stdout_filename = strings.trim(first_word[0], " ")
 						stdout_append = true
 					} else {
-						stdout_filename = strings.trim(raw_args[index + 1:], " ")
+						remaining := strings.trim(raw_args[index + 1:], " ")
+						first_word, split_err := strings.split(
+							remaining,
+							" ",
+							context.temp_allocator,
+						)
+						if split_err != nil {
+							return {}, split_err
+						}
+						stdout_filename = strings.trim(first_word[0], " ")
 					}
 				} else {
 					if raw_args[index + 1] == '>' {
-						stdout_filename = strings.trim(raw_args[index + 2:], " ")
+						remaining := strings.trim(raw_args[index + 2:], " ")
+						first_word, split_err := strings.split(
+							remaining,
+							" ",
+							context.temp_allocator,
+						)
+						if split_err != nil {
+							return {}, split_err
+						}
+						stdout_filename = strings.trim(first_word[0], " ")
 						stdout_append = true
 					} else {
-						stdout_filename = strings.trim(raw_args[index + 1:], " ")
+						remaining := strings.trim(raw_args[index + 1:], " ")
+						first_word, split_err := strings.split(
+							remaining,
+							" ",
+							context.temp_allocator,
+						)
+						if split_err != nil {
+							return {}, split_err
+						}
+						stdout_filename = strings.trim(first_word[0], " ")
 					}
 				}
+				break
+			}
+
+			if c == '<' {
+				if strings.builder_len(arg) > 0 {
+					append(&args, strings.clone(strings.to_string(arg), context.temp_allocator))
+					strings.builder_reset(&arg)
+				}
+
+				remaining := strings.trim(raw_args[index + 1:], " ")
+				first_word, split_err := strings.split(remaining, " ", context.temp_allocator)
+				if split_err != nil {
+					return {}, split_err
+				}
+				stdin_filename = first_word[0]
 				break
 			}
 
@@ -200,6 +270,7 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 	result = {
 		command = cmd,
 		args = args[:],
+		stdin_redirect = Redirect{filename = stdin_filename, append_mode = false},
 		stdout_redirect = Redirect{filename = stdout_filename, append_mode = stdout_append},
 		stderr_redirect = Redirect{filename = stderr_filename, append_mode = stderr_append},
 	}

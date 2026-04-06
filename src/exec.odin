@@ -185,6 +185,7 @@ redirect_fd :: proc(fildes: posix.FD, redirect: Redirect) {
 }
 
 
+// Check if command is found and executable
 resolve_command :: proc(command: string) -> (full_path: string, found: bool, err: Error) {
 	if len(command) == 0 {
 		return "", false, .Empty_Input
@@ -234,6 +235,23 @@ exec_external :: proc(full_path: string, parse_result: Parse_Result) -> (err: Er
 	}
 	if len(parse_result.stderr_redirect.filename) > 0 {
 		redirect_fd(posix.FD(c.int(2)), parse_result.stderr_redirect)
+	}
+	if len(parse_result.stdin_redirect.filename) > 0 {
+		fd := posix.open(
+			strings.clone_to_cstring(parse_result.stdin_redirect.filename, context.temp_allocator),
+			posix.O_Flags{},
+			{},
+		)
+		if fd == -1 {
+			fmt.printf(
+				"%s: no such file or directory: %s",
+				SHELL_NAME,
+				parse_result.stdin_redirect.filename,
+			)
+			posix.exit(1)
+		}
+		posix.dup2(fd, 0)
+		posix.close(fd)
 	}
 
 	c_command, alloc_err = strings.clone_to_cstring(parse_result.command, context.temp_allocator)
