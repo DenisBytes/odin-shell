@@ -468,3 +468,197 @@ test_pipe_split_no_spaces :: proc(t: ^testing.T) {
 	testing.expect_value(t, commands[1], "head")
 	testing.expect(t, err == nil, "expected no error")
 }
+
+
+@(test)
+test_split_commands_single :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("echo hello")
+
+	testing.expect_value(t, len(commands), 1)
+	testing.expect_value(t, commands[0], "echo hello")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_split_commands_two :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("echo hello; echo world")
+
+	testing.expect_value(t, len(commands), 2)
+	testing.expect_value(t, commands[0], "echo hello")
+	testing.expect_value(t, commands[1], "echo world")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_split_commands_three :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("ls -la; pwd; echo done")
+
+	testing.expect_value(t, len(commands), 3)
+	testing.expect_value(t, commands[0], "ls -la")
+	testing.expect_value(t, commands[1], "pwd")
+	testing.expect_value(t, commands[2], "echo done")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_split_commands_semicolon_in_double_quotes :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("echo \"a ; b\"")
+
+	testing.expect_value(t, len(commands), 1)
+	testing.expect_value(t, commands[0], "echo \"a ; b\"")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_split_commands_semicolon_in_single_quotes :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("echo 'a ; b'")
+
+	testing.expect_value(t, len(commands), 1)
+	testing.expect_value(t, commands[0], "echo 'a ; b'")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_split_commands_qouted_and_unqouted :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("echo \"x ; y\" ; echo z")
+
+	testing.expect_value(t, len(commands), 2)
+	testing.expect_value(t, commands[0], "echo \"x ; y\"")
+	testing.expect_value(t, commands[1], "echo z")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_split_commands_double_semicolon :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("echo a ;; echo b")
+
+	testing.expect_value(t, len(commands), 0)
+	testing.expect_value(t, err, Shell_Error.Parse_Error)
+}
+
+
+@(test)
+test_split_commands_leading_semicolon :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("; echo hello")
+
+	testing.expect_value(t, len(commands), 0)
+	testing.expect_value(t, err, Shell_Error.Parse_Error)
+}
+
+
+@(test)
+test_split_commands_trailing_semicolon :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("echo hello ;")
+
+	testing.expect_value(t, len(commands), 1)
+	testing.expect_value(t, commands[0], "echo hello")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_split_commands_only_semicolons :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands(";;;;")
+
+	testing.expect_value(t, len(commands), 0)
+	testing.expect_value(t, err, Shell_Error.Parse_Error)
+}
+
+
+@(test)
+test_split_commands_escaped_semicolon :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("echo a \\; echo b ")
+
+	testing.expect_value(t, len(commands), 1)
+	testing.expect_value(t, commands[0], "echo a \\; echo b")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_split_commands_with_pipe :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("  echo a | cat ; echo b ")
+
+	testing.expect_value(t, len(commands), 2)
+	testing.expect_value(t, commands[0], "echo a | cat")
+	testing.expect_value(t, commands[1], "echo b")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_split_commands_trimmed :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("  echo a  ; echo b ")
+
+	testing.expect_value(t, len(commands), 2)
+	testing.expect_value(t, commands[0], "echo a")
+	testing.expect_value(t, commands[1], "echo b")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_split_commands_no_space :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("echo a;echo b")
+
+	testing.expect_value(t, len(commands), 2)
+	testing.expect_value(t, commands[0], "echo a")
+	testing.expect_value(t, commands[1], "echo b")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_split_commands_empty :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("")
+
+	testing.expect_value(t, len(commands), 0)
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_split_commands_only_spaces :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("    ")
+
+	testing.expect_value(t, len(commands), 0)
+	testing.expect(t, err == nil, "expected no error")
+}

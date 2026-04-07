@@ -92,13 +92,6 @@ cmd_cd :: proc(args: []string, redirect: Redirect) -> i32 {
 			return 0
 		} else {
 			path := args[0]
-			if strings.has_prefix(args[0], "~") {
-				home := os.get_env_alloc("HOME", context.temp_allocator)
-				index := strings.index(args[0], "~")
-				if index != -1 {
-					path = strings.concatenate({home, args[0][index + 1:]}, context.temp_allocator)
-				}
-			}
 
 			cd_err := os.change_directory(path)
 			if cd_err != nil {

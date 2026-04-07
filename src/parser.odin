@@ -1,6 +1,7 @@
 package main
 
 import "base:runtime"
+import "core:fmt"
 import "core:io"
 import "core:strings"
 
@@ -280,6 +281,8 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 }
 
 
+// | support a.k.a. redirect stdout of first command to stdin second command
+// Ex: ls -l | grep ".md"
 pipe_split :: proc(input: string) -> ([]string, Error) {
 	in_single_quote := false
 	in_double_quote := false
@@ -346,6 +349,65 @@ pipe_split :: proc(input: string) -> ([]string, Error) {
 		append(&commands, trimmed)
 	}
 
+
+	return commands[:], nil
+}
+
+// ; support
+split_commands :: proc(input: string) -> ([]string, Error) {
+	in_single_quote := false
+	in_double_quote := false
+	is_backslash := false
+	commands := [dynamic]string{}
+	new_command_index := 0
+
+	for c, index in input {
+		if in_single_quote {
+			if c == '\'' {
+				in_single_quote = false
+				continue
+			}
+		} else if in_double_quote {
+			if c == '"' {
+				in_double_quote = false
+				continue
+			}
+		} else {
+
+			if is_backslash {
+				is_backslash = false
+				continue
+			}
+			if c == '\\' {
+				is_backslash = true
+				continue
+			}
+			if c == '"' {
+				in_double_quote = true
+				continue
+			}
+			if c == '\'' {
+				in_single_quote = true
+				continue
+			}
+
+			if c == ';' {
+				trimmed := strings.trim_space(input[new_command_index:index])
+				if len(trimmed) == 0 {
+					return nil, .Parse_Error
+				} else {
+					append(&commands, trimmed)
+					new_command_index = index + 1
+					continue
+				}
+			}
+		}
+	}
+
+	trimmed := strings.trim_space(input[new_command_index:])
+	if len(trimmed) > 0 {
+		append(&commands, trimmed)
+	}
 
 	return commands[:], nil
 }

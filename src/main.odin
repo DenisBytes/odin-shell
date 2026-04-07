@@ -83,6 +83,7 @@ main :: proc() {
 	input_str := ""
 	history_index := len(commands_history)
 
+	// REPL
 	for {
 		defer free_all(context.temp_allocator)
 		fmt.printf("%s", PROMPT)
@@ -162,79 +163,114 @@ main :: proc() {
 		append(&commands_history, input_clone)
 		history_index = len(commands_history)
 
-		pipe_split_commands, pipe_split_err := pipe_split(input_str)
-		if pipe_split_err != nil {
-			fmt.printf("zsh: parse error near `|'")
-			return
-		}
-
-		if len(pipe_split_commands) > 1 {
-			execute_pipeline(pipe_split_commands)
-		} else {
-			parse_result, err := parse_input(input_str)
-			if err != nil {
-				switch e in err {
-				case Shell_Error:
-					#partial switch e {
-					case .Empty_Input:
-						continue
-					case:
-						fmt.printf("shell: error: %v", err)
-					}
-				case runtime.Allocator_Error:
-					fmt.printf("shell: alloc error: %v", err)
-				case io.Error:
-					fmt.printf("shell: io error: %v", err)
+		// NOTE: not returning any error since fails silently
+		semi_commands, split_err := split_commands(input_str)
+		if split_err != nil {
+			#partial switch e in split_err {
+			case Shell_Error:
+				#partial switch e {
+				case .Parse_Error:
+					fmt.printf("%s: parse error near ';;'\n", SHELL_NAME)
 				}
 			}
+			return
+		}
+		for semi_cmd in semi_commands {
+			pipe_split_commands, pipe_split_err := pipe_split(semi_cmd)
+			if pipe_split_err != nil {
+				fmt.printf("zsh: parse error near `|'")
+				return
+			}
 
-			if handler, ok := handlers[parse_result.command]; ok {
-
-				last_exit_code = handler(parse_result.args, parse_result.stdout_redirect)
-				if len(parse_result.stderr_redirect.filename) > 0 {
-					redirect_output("", parse_result.stderr_redirect)
-				}
-
+			if len(pipe_split_commands) > 1 {
+				execute_pipeline(pipe_split_commands)
 			} else {
-
-				full_path, found, err := resolve_command(parse_result.command)
+				parse_result, err := parse_input(semi_cmd)
 				if err != nil {
-					#partial switch e in err {
+					switch e in err {
 					case Shell_Error:
 						#partial switch e {
 						case .Empty_Input:
 							continue
+						case:
+							fmt.printf("shell: error: %v", err)
 						}
 					case runtime.Allocator_Error:
 						fmt.printf("shell: alloc error: %v", err)
+					case io.Error:
+						fmt.printf("shell: io error: %v", err)
 					}
+					return
 				}
 
-				if found {
+				for arg, i in parse_result.args {
+					parse_result.args[i] = expand_tilde(arg)
+				}
+				if len(parse_result.stdin_redirect.filename) > 0 {
+					parse_result.stdin_redirect.filename = expand_tilde(
+						parse_result.stdin_redirect.filename,
+					)
+				}
+				if len(parse_result.stdout_redirect.filename) > 0 {
+					parse_result.stdout_redirect.filename = expand_tilde(
+						parse_result.stdout_redirect.filename,
+					)
+				}
+				if len(parse_result.stderr_redirect.filename) > 0 {
+					parse_result.stderr_redirect.filename = expand_tilde(
+						parse_result.stderr_redirect.filename,
+					)
+				}
 
-					pid := posix.fork()
-					switch pid {
-					case -1:
-						fmt.printf("shell: error in creating fork.\n")
-					case 0:
-						err = exec_external(full_path, parse_result)
-						if err != nil {
-							fmt.printf("shell: alloc err: %v", err)
-							return
-						}
-					case:
-						status: c.int
-						posix.waitpid(posix.pid_t(pid), &status, {})
-						if posix.WIFEXITED(status) {
-							last_exit_code = i32(posix.WEXITSTATUS(status))
-						} else if posix.WIFSIGNALED(status) {
-							last_exit_code = 128 + i32(posix.WTERMSIG(status))
-						}
+
+				if handler, ok := handlers[parse_result.command]; ok {
+
+					last_exit_code = handler(parse_result.args, parse_result.stdout_redirect)
+					if len(parse_result.stderr_redirect.filename) > 0 {
+						redirect_output("", parse_result.stderr_redirect)
 					}
 
 				} else {
-					fmt.printf("%s: command not found\n", parse_result.command)
-					last_exit_code = 127
+
+					full_path, found, err := resolve_command(parse_result.command)
+					if err != nil {
+						#partial switch e in err {
+						case Shell_Error:
+							#partial switch e {
+							case .Empty_Input:
+								continue
+							}
+						case runtime.Allocator_Error:
+							fmt.printf("shell: alloc error: %v", err)
+						}
+					}
+
+					if found {
+
+						pid := posix.fork()
+						switch pid {
+						case -1:
+							fmt.printf("shell: error in creating fork.\n")
+						case 0:
+							err = exec_external(full_path, parse_result)
+							if err != nil {
+								fmt.printf("shell: alloc err: %v", err)
+								return
+							}
+						case:
+							status: c.int
+							posix.waitpid(posix.pid_t(pid), &status, {})
+							if posix.WIFEXITED(status) {
+								last_exit_code = i32(posix.WEXITSTATUS(status))
+							} else if posix.WIFSIGNALED(status) {
+								last_exit_code = 128 + i32(posix.WTERMSIG(status))
+							}
+						}
+
+					} else {
+						fmt.printf("%s: command not found\n", parse_result.command)
+						last_exit_code = 127
+					}
 				}
 			}
 		}
