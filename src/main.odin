@@ -67,7 +67,7 @@ main :: proc() {
 		if file_bytes_err == nil {
 			history_commands, history_commands_err := strings.split(string(file_bytes[:]), "\n")
 			if history_commands_err != nil {
-				fmt.printf("history: parsing error: %w\n", history_commands_err)
+				fmt.eprintf("history: parsing error: %w\n", history_commands_err)
 				return
 			}
 			for c in history_commands {
@@ -91,7 +91,7 @@ main :: proc() {
 		defer delete(input_buf)
 
 		tab_count: uint = 0
-		inner: for {
+		for {
 			char_buf: [1]byte
 			n, read_err := os.read(os.stdin, char_buf[:])
 			if read_err != nil || n == 0 {
@@ -105,7 +105,7 @@ main :: proc() {
 			case '\n':
 				fmt.printf("\n")
 				input_str = string(input_buf[:])
-				break inner
+				break
 			// TAB
 			case '\t':
 				tab_count += 1
@@ -159,18 +159,19 @@ main :: proc() {
 			}
 		}
 
-		input_clone, _ := strings.clone(input_str)
+		input_clone, clone_err := strings.clone(input_str)
+		if clone_err != nil {oom_fatal()}
+
 		append(&commands_history, input_clone)
 		history_index = len(commands_history)
 
-		// NOTE: not returning any error since fails silently
 		semi_commands, split_err := split_commands(input_str)
 		if split_err != nil {
 			#partial switch e in split_err {
 			case Shell_Error:
 				#partial switch e {
 				case .Parse_Error:
-					fmt.printf("%s: parse error near ';;'\n", SHELL_NAME)
+					continue
 				}
 			}
 			return
@@ -178,7 +179,13 @@ main :: proc() {
 		for semi_cmd in semi_commands {
 			pipe_split_commands, pipe_split_err := pipe_split(semi_cmd)
 			if pipe_split_err != nil {
-				fmt.printf("zsh: parse error near `|'")
+				#partial switch e in pipe_split_err {
+				case Shell_Error:
+					#partial switch e {
+					case .Parse_Error:
+						continue
+					}
+				}
 				return
 			}
 
@@ -192,46 +199,99 @@ main :: proc() {
 						#partial switch e {
 						case .Empty_Input:
 							continue
+						case .Parse_Error:
+							continue
 						case:
-							fmt.printf("shell: error: %v", err)
+							fmt.eprintf("shell: error: %v\n", err)
 						}
 					case runtime.Allocator_Error:
-						fmt.printf("shell: alloc error: %v", err)
+						fmt.eprintf("shell: alloc error: %v\n", err)
 					case io.Error:
-						fmt.printf("shell: io error: %v", err)
+						fmt.eprintf("shell: io error: %v\n", err)
 					}
 					return
 				}
 
-				for arg, i in parse_result.args {
-					parse_result.args[i] = expand_tilde(arg)
-				}
+				ok: bool
 				if len(parse_result.stdin_redirect.filename) > 0 {
-					parse_result.stdin_redirect.filename = expand_tilde(
+					parse_result.stdin_redirect.filename, ok = expand_tilde(
 						parse_result.stdin_redirect.filename,
 					)
+					if !ok {
+						fmt.eprintf(
+							"%s: no such user or named directory: %s\n",
+							SHELL_NAME,
+							parse_result.stdin_redirect.filename,
+						)
+						last_exit_code = 1
+						continue
+					}
 				}
 				if len(parse_result.stdout_redirect.filename) > 0 {
-					parse_result.stdout_redirect.filename = expand_tilde(
+					parse_result.stdout_redirect.filename, ok = expand_tilde(
 						parse_result.stdout_redirect.filename,
 					)
+					if !ok {
+						fmt.eprintf(
+							"%s: no such user or named directory: %s\n",
+							SHELL_NAME,
+							parse_result.stdout_redirect.filename,
+						)
+						last_exit_code = 1
+						continue
+					}
 				}
 				if len(parse_result.stderr_redirect.filename) > 0 {
-					parse_result.stderr_redirect.filename = expand_tilde(
+					parse_result.stderr_redirect.filename, ok = expand_tilde(
 						parse_result.stderr_redirect.filename,
 					)
+					if !ok {
+						fmt.eprintf(
+							"%s: no such user or named directory: %s\n",
+							SHELL_NAME,
+							parse_result.stderr_redirect.filename,
+						)
+						last_exit_code = 1
+						continue
+					}
 				}
 
+				new_args := make([dynamic]string, context.temp_allocator)
+				tilde_ok := true
+				for arg, i in parse_result.args {
+					parse_result.args[i], ok = expand_tilde(arg)
+					if !ok {
+						username, username_err := strings.split(
+							parse_result.args[i][1:],
+							"/",
+							context.temp_allocator,
+						)
+						if username_err != nil {oom_fatal()}
+
+						fmt.eprintf(
+							"%s: no such user or named directory: %s\n",
+							SHELL_NAME,
+							username[0],
+						)
+						last_exit_code = 1
+						tilde_ok = false
+						break
+					}
+					expanded := expand_braces(parse_result.args[i])
+					for e in expanded {
+						append(&new_args, e)
+					}
+				}
+				if !tilde_ok {continue}
+
+				parse_result.args = new_args[:]
 
 				if handler, ok := handlers[parse_result.command]; ok {
-
 					last_exit_code = handler(parse_result.args, parse_result.stdout_redirect)
 					if len(parse_result.stderr_redirect.filename) > 0 {
 						redirect_output("", parse_result.stderr_redirect)
 					}
-
 				} else {
-
 					full_path, found, err := resolve_command(parse_result.command)
 					if err != nil {
 						#partial switch e in err {
@@ -241,7 +301,7 @@ main :: proc() {
 								continue
 							}
 						case runtime.Allocator_Error:
-							fmt.printf("shell: alloc error: %v", err)
+							oom_fatal()
 						}
 					}
 
@@ -250,13 +310,10 @@ main :: proc() {
 						pid := posix.fork()
 						switch pid {
 						case -1:
-							fmt.printf("shell: error in creating fork.\n")
+							fmt.eprintf("shell: error in creating fork.\n")
 						case 0:
 							err = exec_external(full_path, parse_result)
-							if err != nil {
-								fmt.printf("shell: alloc err: %v", err)
-								return
-							}
+							if err != nil {oom_fatal()}
 						case:
 							status: c.int
 							posix.waitpid(posix.pid_t(pid), &status, {})
@@ -268,7 +325,7 @@ main :: proc() {
 						}
 
 					} else {
-						fmt.printf("%s: command not found\n", parse_result.command)
+						fmt.eprintf("%s: command not found\n", parse_result.command)
 						last_exit_code = 127
 					}
 				}

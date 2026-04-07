@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:io"
 import "core:strings"
 
+// Parse_Error already handled by this func, caller should just continue
 parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 	io_err: io.Error
 	alloc_err: runtime.Allocator_Error
@@ -15,7 +16,7 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 
 	input := strings.trim_left(raw_input, " ")
 	if len(input) == 0 {
-		return {}, Shell_Error.Empty_Input
+		return {}, .Empty_Input
 	}
 
 	cmd_builder, alloc_err = strings.builder_make_none()
@@ -79,6 +80,7 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 	in_single_quote := false
 	in_double_quote := false
 	is_backslash = false
+	brace_depth := 0
 	args := [dynamic]string{}
 
 	arg: strings.Builder
@@ -152,8 +154,30 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 				continue
 			}
 
+			if c == '}' && brace_depth == 0 {
+				if index + 1 < len(input) && input[index + 1] != ' ' {
+					_, io_err = strings.write_rune(&arg, c)
+					if io_err != nil {
+						return {}, io_err
+					}
+					continue
+				}
+				// if '}' is last or has has whitespace next (white space before is already prev iteration below)
+				fmt.eprintf("%s: parse error near `}'\n", SHELL_NAME)
+				return {}, .Parse_Error
+			}
+			if c == '{' {
+				brace_depth += 1
+			}
+			if c == '}' {
+				brace_depth -= 1
+			}
 
 			if c == ' ' {
+				if brace_depth > 0 {
+					fmt.eprintf("%s: parse error near `}'\n", SHELL_NAME)
+					return {}, .Parse_Error
+				}
 				if strings.builder_len(arg) > 0 {
 					append(&args, strings.clone(strings.to_string(arg), context.temp_allocator))
 					strings.builder_reset(&arg)
@@ -331,6 +355,7 @@ pipe_split :: proc(input: string) -> ([]string, Error) {
 				} else {
 					trimmed := strings.trim_space(input[new_command_index:index])
 					if len(trimmed) == 0 {
+						fmt.eprintf("%s: parse error near `|'\n", SHELL_NAME)
 						return {}, .Parse_Error
 					} else {
 						append(&commands, trimmed)
@@ -344,6 +369,7 @@ pipe_split :: proc(input: string) -> ([]string, Error) {
 
 	trimmed := strings.trim_space(input[new_command_index:])
 	if len(trimmed) == 0 {
+		fmt.eprintf("%s: parse error near `|'\n", SHELL_NAME)
 		return {}, .Parse_Error
 	} else {
 		append(&commands, trimmed)
@@ -394,6 +420,7 @@ split_commands :: proc(input: string) -> ([]string, Error) {
 			if c == ';' {
 				trimmed := strings.trim_space(input[new_command_index:index])
 				if len(trimmed) == 0 {
+					fmt.eprintf("%s: parse error near `;;'\n", SHELL_NAME)
 					return nil, .Parse_Error
 				} else {
 					append(&commands, trimmed)

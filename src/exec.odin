@@ -11,12 +11,17 @@ import "core:sys/posix"
 redirect_output :: proc(output: string, redirect: Redirect) {
 	pwd, pwd_err := os.get_working_directory(context.temp_allocator)
 	if pwd_err != nil {
-		fmt.printf("shell: could not read current working directory %w\n", pwd_err)
+		fmt.eprintf("shell: could not read current working directory %w\n", pwd_err)
 	}
 
 	full := redirect.filename
 	if redirect.filename[0] != '/' {
-		full = strings.concatenate({pwd, "/", redirect.filename}, context.temp_allocator)
+		concat_err: runtime.Allocator_Error
+		full, concat_err = strings.concatenate(
+			{pwd, "/", redirect.filename},
+			context.temp_allocator,
+		)
+		if concat_err != nil {oom_fatal()}
 	}
 
 	file := &os.File{}
@@ -35,13 +40,13 @@ redirect_output :: proc(output: string, redirect: Redirect) {
 		)
 	}
 	if file_err != nil {
-		fmt.printf("shell: could not create or truncate file %s\n", redirect.filename)
+		fmt.eprintf("shell: could not create or truncate file %s\n", redirect.filename)
 		return
 	}
 	defer os.close(file)
 	_, write_err := os.write_string(file, output)
 	if write_err != nil {
-		fmt.printf("shell: could not write to file %s\n", redirect.filename)
+		fmt.eprintf("shell: could not write to file %s\n", redirect.filename)
 		return
 	}
 }
@@ -55,7 +60,7 @@ execute_pipeline :: proc(commands: []string) {
 		fildes: [2]posix.FD
 		if i < len(commands) - 1 {
 			if posix.pipe(&fildes) != .OK {
-				fmt.printf("shell: error in creating pipe.\n")
+				fmt.eprintf("shell: error in creating pipe.\n")
 			}
 		}
 
@@ -63,7 +68,7 @@ execute_pipeline :: proc(commands: []string) {
 		pid := posix.fork()
 		switch pid {
 		case -1:
-			fmt.printf("shell: error in creating fork.\n")
+			fmt.eprintf("shell: error in creating fork.\n")
 
 		case 0:
 			if prev_read_fd != -1 {
@@ -93,17 +98,96 @@ execute_pipeline :: proc(commands: []string) {
 				switch e in err {
 				case Shell_Error:
 					#partial switch e {
-					case Shell_Error.Empty_Input:
-						continue
+					case .Empty_Input:
+						last_exit_code = 1
+						posix.exit(last_exit_code)
+					case .Parse_Error:
+						last_exit_code = 1
+						posix.exit(last_exit_code)
 					case:
-						fmt.printf("shell: error: %v", err)
+						fmt.eprintf("shell: error: %v", err)
 					}
 				case runtime.Allocator_Error:
-					fmt.printf("shell: alloc error: %v", err)
+					fmt.eprintf("shell: alloc error: %v", err)
 				case io.Error:
-					fmt.printf("shell: io error: %v", err)
+					fmt.eprintf("shell: io error: %v", err)
 				}
 			}
+
+
+			ok: bool
+			if len(parse_result.stdin_redirect.filename) > 0 {
+				parse_result.stdin_redirect.filename, ok = expand_tilde(
+					parse_result.stdin_redirect.filename,
+				)
+				if !ok {
+					fmt.eprintf(
+						"%s: no such user or named directory: %s\n",
+						SHELL_NAME,
+						parse_result.stdin_redirect.filename,
+					)
+					last_exit_code = 1
+					posix.exit(last_exit_code)
+				}
+			}
+			if len(parse_result.stdout_redirect.filename) > 0 {
+				parse_result.stdout_redirect.filename, ok = expand_tilde(
+					parse_result.stdout_redirect.filename,
+				)
+				if !ok {
+					fmt.eprintf(
+						"%s: no such user or named directory: %s\n",
+						SHELL_NAME,
+						parse_result.stdout_redirect.filename,
+					)
+					last_exit_code = 1
+					posix.exit(last_exit_code)
+				}
+			}
+			if len(parse_result.stderr_redirect.filename) > 0 {
+				parse_result.stderr_redirect.filename, ok = expand_tilde(
+					parse_result.stderr_redirect.filename,
+				)
+				if !ok {
+					fmt.eprintf(
+						"%s: no such user or named directory: %s\n",
+						SHELL_NAME,
+						parse_result.stderr_redirect.filename,
+					)
+					last_exit_code = 1
+					posix.exit(last_exit_code)
+				}
+			}
+
+			new_args := make([dynamic]string, context.temp_allocator)
+			tilde_ok := true
+			for arg, i in parse_result.args {
+				parse_result.args[i], ok = expand_tilde(arg)
+				if !ok {
+					username, username_err := strings.split(
+						parse_result.args[i][1:],
+						"/",
+						context.temp_allocator,
+					)
+					if username_err != nil {oom_fatal()}
+
+					fmt.eprintf(
+						"%s: no such user or named directory: %s\n",
+						SHELL_NAME,
+						username[0],
+					)
+					last_exit_code = 1
+					tilde_ok = false
+					break
+				}
+				expanded := expand_braces(parse_result.args[i])
+				for e in expanded {
+					append(&new_args, e)
+				}
+			}
+			if !tilde_ok {posix.exit(last_exit_code)}
+
+			parse_result.args = new_args[:]
 
 			if handler, ok := handlers[parse_result.command]; ok {
 				last_exit_code = handler(parse_result.args, parse_result.stdout_redirect)
@@ -114,40 +198,38 @@ execute_pipeline :: proc(commands: []string) {
 				posix.exit(last_exit_code)
 
 			} else {
-
 				full_path, found, err := resolve_command(parse_result.command)
 				if err != nil {
 					#partial switch e in err {
 					case Shell_Error:
 						#partial switch e {
 						case .Empty_Input:
-							continue
+							last_exit_code = 1
+							posix.exit(last_exit_code)
 						}
 					case runtime.Allocator_Error:
-						fmt.printf("shell: alloc error: %v", err)
+						fmt.eprintf("shell: alloc error: %v", err)
 					}
 				}
 
 				if found {
 					err = exec_external(full_path, parse_result)
 					if err != nil {
-						fmt.printf("shell: alloc err: %v", err)
+						fmt.eprintf("shell: alloc err: %v", err)
 						return
 					}
 				} else {
-					fmt.printf("%s: command not found\n", parse_result.command)
+					fmt.eprintf("%s: command not found\n", parse_result.command)
 					last_exit_code = 127
 				}
 			}
 
 		case:
 			if prev_read_fd != -1 {
-				// close write end
 				posix.close(posix.FD(c.int(prev_read_fd)))
 			}
 
 			if i < len(commands) - 1 {
-				// close write end
 				posix.close(fildes[1])
 				prev_read_fd = int(fildes[0])
 			}
@@ -174,12 +256,11 @@ execute_pipeline :: proc(commands: []string) {
 redirect_fd :: proc(fildes: posix.FD, redirect: Redirect) {
 	flags := posix.O_Flags{.WRONLY, .CREAT}
 	flags += {.APPEND} if redirect.append_mode else {.TRUNC}
-	fd := posix.open(
-		strings.clone_to_cstring(redirect.filename, context.temp_allocator),
-		flags,
-		{.IRUSR, .IWUSR, .IRGRP, .IROTH},
-	)
 
+	filename, err := strings.clone_to_cstring(redirect.filename, context.temp_allocator)
+	if err != nil {oom_fatal()}
+
+	fd := posix.open(filename, flags, {.IRUSR, .IWUSR, .IRGRP, .IROTH})
 	posix.dup2(fd, fildes)
 	posix.close(fd)
 }
@@ -193,9 +274,7 @@ resolve_command :: proc(command: string) -> (full_path: string, found: bool, err
 
 	path := os.get_env_alloc("PATH", context.temp_allocator)
 	dirs, split_err := strings.split(path, ":")
-	if split_err != nil {
-		return "", false, split_err
-	}
+	if split_err != nil {oom_fatal()}
 
 	found = false
 
@@ -243,7 +322,7 @@ exec_external :: proc(full_path: string, parse_result: Parse_Result) -> (err: Er
 			{},
 		)
 		if fd == -1 {
-			fmt.printf(
+			fmt.eprintf(
 				"%s: no such file or directory: %s",
 				SHELL_NAME,
 				parse_result.stdin_redirect.filename,
@@ -255,15 +334,13 @@ exec_external :: proc(full_path: string, parse_result: Parse_Result) -> (err: Er
 	}
 
 	c_command, alloc_err = strings.clone_to_cstring(parse_result.command, context.temp_allocator)
-	if alloc_err != nil {
-		return alloc_err
-	}
+	if alloc_err != nil {oom_fatal()}
+
 	c_cmd := make([dynamic]cstring, context.temp_allocator)
 	for s in cmd {
 		c_s, clone_err := strings.clone_to_cstring(s, context.temp_allocator)
-		if clone_err != nil {
-			fmt.printf("shell: error executing command: %w\n", clone_err)
-		}
+		if clone_err != nil {oom_fatal()}
+
 		append(&c_cmd, c_s)
 	}
 	append(&c_cmd, nil)

@@ -346,6 +346,23 @@ test_parse_backslash_edge_cases :: proc(t: ^testing.T) {
 
 
 @(test)
+test_split_braces_with_spaces :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	parse_result, err := parse_input("echo { a,b,c }")
+
+	testing.expect_value(t, err, Shell_Error.Parse_Error)
+
+	testing.expect_value(t, parse_result.command, "")
+	testing.expect_value(t, len(parse_result.args), 0)
+	testing.expect_value(t, parse_result.stdout_redirect.filename, "")
+	testing.expect_value(t, parse_result.stdout_redirect.append_mode, false)
+	testing.expect_value(t, parse_result.stderr_redirect.filename, "")
+	testing.expect_value(t, parse_result.stderr_redirect.append_mode, false)
+}
+
+
+@(test)
 test_pipe_split_two :: proc(t: ^testing.T) {
 	context.allocator = context.temp_allocator
 
