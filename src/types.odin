@@ -1,7 +1,9 @@
 package main
 
 import "base:runtime"
+import "core:fmt"
 import "core:io"
+import "core:sys/posix"
 
 SHELL_NAME :: "zsh"
 PROMPT :: "% "
@@ -34,4 +36,9 @@ Error :: union {
 Redirect :: struct {
 	filename:    string,
 	append_mode: bool,
+}
+
+oom_fatal :: proc() -> ! {
+	fmt.eprintf("%s: fatal error: out of memory\n", SHELL_NAME)
+	posix.exit(1)
 }
