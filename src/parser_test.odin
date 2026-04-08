@@ -580,8 +580,9 @@ test_split_commands_leading_semicolon :: proc(t: ^testing.T) {
 
 	commands, err := split_commands("; echo hello")
 
-	testing.expect_value(t, len(commands), 0)
-	testing.expect_value(t, err, Shell_Error.Parse_Error)
+	testing.expect_value(t, len(commands), 1)
+	testing.expect_value(t, commands[0], "echo hello")
+	testing.expect(t, err == nil, "expected no error")
 }
 
 
@@ -593,6 +594,19 @@ test_split_commands_trailing_semicolon :: proc(t: ^testing.T) {
 
 	testing.expect_value(t, len(commands), 1)
 	testing.expect_value(t, commands[0], "echo hello")
+	testing.expect(t, err == nil, "expected no error")
+}
+
+
+@(test)
+test_split_commands_empty_between_semicolons :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	commands, err := split_commands("echo a ; ; echo b")
+
+	testing.expect_value(t, len(commands), 2)
+	testing.expect_value(t, commands[0], "echo a")	
+	testing.expect_value(t, commands[1], "echo b")
 	testing.expect(t, err == nil, "expected no error")
 }
 
