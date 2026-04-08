@@ -201,15 +201,12 @@ main :: proc() {
 							continue
 						case .Parse_Error:
 							continue
-						case:
-							fmt.eprintf("shell: error: %v\n", err)
 						}
 					case runtime.Allocator_Error:
-						fmt.eprintf("shell: alloc error: %v\n", err)
+						oom_fatal()
 					case io.Error:
-						fmt.eprintf("shell: io error: %v\n", err)
-					}
-					return
+						oom_fatal()
+			}
 				}
 
 				ok: bool
@@ -310,7 +307,9 @@ main :: proc() {
 						pid := posix.fork()
 						switch pid {
 						case -1:
-							fmt.eprintf("shell: error in creating fork.\n")
+							fmt.eprintf("%s: fork failed: resource temporarily unavailable\n", SHELL_NAME)
+							last_exit_code = 1
+							continue
 						case 0:
 							err = exec_external(full_path, parse_result)
 							if err != nil {oom_fatal()}
@@ -325,7 +324,11 @@ main :: proc() {
 						}
 
 					} else {
-						fmt.eprintf("%s: command not found\n", parse_result.command)
+						fmt.eprintf(
+							"%s: command not found: %s\n",
+							SHELL_NAME,
+							parse_result.command,
+						)
 						last_exit_code = 127
 					}
 				}

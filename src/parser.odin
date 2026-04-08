@@ -418,12 +418,11 @@ split_commands :: proc(input: string) -> ([]string, Error) {
 			}
 
 			if c == ';' {
-				trimmed := strings.trim_space(input[new_command_index:index])
-				if len(trimmed) == 0 {
-					fmt.eprintf("%s: parse error near `;;'\n", SHELL_NAME)
-					return nil, .Parse_Error
-				} else {
-					append(&commands, trimmed)
+				if index + 1 < len(input) && input[index + 1] == ';' {
+					trimmed := strings.trim_space(input[new_command_index:index])
+					if len(trimmed) > 0 {
+						append(&commands, trimmed)
+					}
 					new_command_index = index + 1
 					continue
 				}

@@ -68,7 +68,7 @@ try_autocomplete :: proc(input_buf: ^[dynamic]byte, tab_count: uint) {
 		path := os.get_env_alloc("PATH", context.temp_allocator)
 		dirs, split_dir_err := strings.split(path, ":")
 		if split_dir_err != nil {
-			fmt.eprintf("shell: error splitting PATH: %w\n", split_dir_err)
+			oom_fatal()
 		}
 
 		for dir in dirs {

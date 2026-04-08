@@ -11,7 +11,7 @@ import "core:sys/posix"
 redirect_output :: proc(output: string, redirect: Redirect) {
 	pwd, pwd_err := os.get_working_directory(context.temp_allocator)
 	if pwd_err != nil {
-		fmt.eprintf("shell: could not read current working directory %w\n", pwd_err)
+		fmt.eprintf("%s: could not read current working directory %w\n", SHELL_NAME, pwd_err)
 	}
 
 	full := redirect.filename
@@ -40,13 +40,13 @@ redirect_output :: proc(output: string, redirect: Redirect) {
 		)
 	}
 	if file_err != nil {
-		fmt.eprintf("shell: could not create or truncate file %s\n", redirect.filename)
+		fmt.eprintf("%s: could not create or truncate file %s\n", SHELL_NAME, redirect.filename)
 		return
 	}
 	defer os.close(file)
 	_, write_err := os.write_string(file, output)
 	if write_err != nil {
-		fmt.eprintf("shell: could not write to file %s\n", redirect.filename)
+		fmt.eprintf("%s: could not write to file %s\n", SHELL_NAME, redirect.filename)
 		return
 	}
 }
@@ -60,7 +60,7 @@ execute_pipeline :: proc(commands: []string) {
 		fildes: [2]posix.FD
 		if i < len(commands) - 1 {
 			if posix.pipe(&fildes) != .OK {
-				fmt.eprintf("shell: error in creating pipe.\n")
+				fmt.eprintf("%s: pipe failed: too many open files\n", SHELL_NAME)
 			}
 		}
 
@@ -68,8 +68,9 @@ execute_pipeline :: proc(commands: []string) {
 		pid := posix.fork()
 		switch pid {
 		case -1:
-			fmt.eprintf("shell: error in creating fork.\n")
-
+			fmt.eprintf("%s: fork failed: resource temporarily unavailable\n", SHELL_NAME)
+			last_exit_code = 1
+			continue
 		case 0:
 			if prev_read_fd != -1 {
 				// write end already closed in parent
@@ -104,13 +105,11 @@ execute_pipeline :: proc(commands: []string) {
 					case .Parse_Error:
 						last_exit_code = 1
 						posix.exit(last_exit_code)
-					case:
-						fmt.eprintf("shell: error: %v", err)
 					}
 				case runtime.Allocator_Error:
-					fmt.eprintf("shell: alloc error: %v", err)
+					oom_fatal()
 				case io.Error:
-					fmt.eprintf("shell: io error: %v", err)
+					oom_fatal()
 				}
 			}
 
@@ -208,18 +207,17 @@ execute_pipeline :: proc(commands: []string) {
 							posix.exit(last_exit_code)
 						}
 					case runtime.Allocator_Error:
-						fmt.eprintf("shell: alloc error: %v", err)
+						oom_fatal()
 					}
 				}
 
 				if found {
 					err = exec_external(full_path, parse_result)
 					if err != nil {
-						fmt.eprintf("shell: alloc err: %v", err)
-						return
+						oom_fatal()
 					}
 				} else {
-					fmt.eprintf("%s: command not found\n", parse_result.command)
+					fmt.eprintf("%s: command not found: %s\n", SHELL_NAME, parse_result.command)
 					last_exit_code = 127
 				}
 			}
@@ -261,6 +259,11 @@ redirect_fd :: proc(fildes: posix.FD, redirect: Redirect) {
 	if err != nil {oom_fatal()}
 
 	fd := posix.open(filename, flags, {.IRUSR, .IWUSR, .IRGRP, .IROTH})
+	if fd == posix.FD(c.int(-1)) {
+		fmt.eprintf("%s: no such file or directory: %s\n", SHELL_NAME, redirect.filename)
+		last_exit_code = 1
+		posix.exit(last_exit_code)
+	}
 	posix.dup2(fd, fildes)
 	posix.close(fd)
 }
@@ -323,7 +326,7 @@ exec_external :: proc(full_path: string, parse_result: Parse_Result) -> (err: Er
 		)
 		if fd == -1 {
 			fmt.eprintf(
-				"%s: no such file or directory: %s",
+				"%s: no such file or directory: %s\n",
 				SHELL_NAME,
 				parse_result.stdin_redirect.filename,
 			)

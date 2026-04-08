@@ -52,7 +52,7 @@ cmd_type :: proc(args: []string, redirect: Redirect) -> i32 {
 					redirect_output(fmt.tprintf("%s is %s\n", arg, path), redirect)
 				}
 			} else {
-				fmt.eprintf("%s: not found\n", arg)
+				fmt.eprintf("%s not found\n", arg)
 			}
 		}
 	}
@@ -62,7 +62,7 @@ cmd_type :: proc(args: []string, redirect: Redirect) -> i32 {
 cmd_pwd :: proc(args: []string, redirect: Redirect) -> i32 {
 	pwd, pwd_err := os.get_working_directory(context.temp_allocator)
 	if pwd_err != nil {
-		fmt.printf("%s: %w\n", SHELL_NAME, pwd_err)
+		fmt.eprintf("%s: unable ro read current directory\n", SHELL_NAME)
 		return 1
 	}
 
@@ -76,14 +76,14 @@ cmd_pwd :: proc(args: []string, redirect: Redirect) -> i32 {
 
 cmd_cd :: proc(args: []string, redirect: Redirect) -> i32 {
 	if len(args) > 1 {
-		fmt.print("cd: Too many arguments\n")
+		fmt.eprint("cd: too many arguments\n")
 		return 1
 	} else {
 		if len(args) == 0 {
 			home := os.get_env_alloc("HOME", context.temp_allocator)
 			cd_err := os.change_directory(home)
 			if cd_err != nil {
-				fmt.eprintf("cd: %s: No such file or directory\n", home)
+				fmt.eprintf("cd: no such file or directory: %s\n", home)
 				return 1
 			}
 			return 0
@@ -92,7 +92,7 @@ cmd_cd :: proc(args: []string, redirect: Redirect) -> i32 {
 
 			cd_err := os.change_directory(path)
 			if cd_err != nil {
-				fmt.eprintf("cd: %s: No such file or directory\n", path)
+				fmt.eprintf("cd: no such file or directory: %s\n", path)
 				return 1
 			}
 			return 0
@@ -129,7 +129,7 @@ cmd_history :: proc(args: []string, redirect: Redirect) -> i32 {
 
 			redirect_output(final_output, Redirect{filename = filename, append_mode = false})
 			last_append_index = len(commands_history)
-			return 1
+			return 0
 		} else if args[0] == "-a" {
 			output, output_err := strings.join(
 				commands_history[last_append_index:],
@@ -138,7 +138,7 @@ cmd_history :: proc(args: []string, redirect: Redirect) -> i32 {
 			)
 			if output_err != nil {
 				fmt.eprintf("history: parsing error: %w\n", output_err)
-				return 1 
+				return 1
 			}
 
 			final_output, concat_err := strings.concatenate({output, "\n"}, context.temp_allocator)
@@ -158,7 +158,7 @@ cmd_history :: proc(args: []string, redirect: Redirect) -> i32 {
 			}
 			redirect_output(final_output, Redirect{filename = filename, append_mode = true})
 			last_append_index = len(commands_history)
-			return 1
+			return 0
 		} else if args[0] == "-r" {
 
 			filename := ""
@@ -192,7 +192,7 @@ cmd_history :: proc(args: []string, redirect: Redirect) -> i32 {
 				}
 			}
 			last_append_index = len(commands_history)
-			return 1
+			return 0
 		} else {
 			arg, ok := strconv.parse_int(args[0], 10)
 			if ok {
