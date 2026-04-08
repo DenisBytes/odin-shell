@@ -91,7 +91,7 @@ main :: proc() {
 		defer delete(input_buf)
 
 		tab_count: uint = 0
-		for {
+		inner: for {
 			char_buf: [1]byte
 			n, read_err := os.read(os.stdin, char_buf[:])
 			if read_err != nil || n == 0 {
@@ -105,7 +105,7 @@ main :: proc() {
 			case '\n':
 				fmt.printf("\n")
 				input_str = string(input_buf[:])
-				break
+				break inner
 			// TAB
 			case '\t':
 				tab_count += 1
