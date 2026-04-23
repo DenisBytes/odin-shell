@@ -206,7 +206,7 @@ main :: proc() {
 						oom_fatal()
 					case io.Error:
 						oom_fatal()
-			}
+					}
 				}
 
 				ok: bool
@@ -223,6 +223,9 @@ main :: proc() {
 						last_exit_code = 1
 						continue
 					}
+					parse_result.stdin_redirect.filename = expand_parameters(
+						parse_result.stdin_redirect.filename,
+					)
 				}
 				if len(parse_result.stdout_redirect.filename) > 0 {
 					parse_result.stdout_redirect.filename, ok = expand_tilde(
@@ -237,6 +240,9 @@ main :: proc() {
 						last_exit_code = 1
 						continue
 					}
+					parse_result.stdout_redirect.filename = expand_parameters(
+						parse_result.stdout_redirect.filename,
+					)
 				}
 				if len(parse_result.stderr_redirect.filename) > 0 {
 					parse_result.stderr_redirect.filename, ok = expand_tilde(
@@ -251,6 +257,9 @@ main :: proc() {
 						last_exit_code = 1
 						continue
 					}
+					parse_result.stderr_redirect.filename = expand_parameters(
+						parse_result.stderr_redirect.filename,
+					)
 				}
 
 				new_args := make([dynamic]string, context.temp_allocator)
@@ -274,6 +283,9 @@ main :: proc() {
 						tilde_ok = false
 						break
 					}
+
+					parse_result.args[i] = expand_parameters(parse_result.args[i])
+
 					expanded := expand_braces(parse_result.args[i])
 					for e in expanded {
 						append(&new_args, e)
@@ -307,7 +319,10 @@ main :: proc() {
 						pid := posix.fork()
 						switch pid {
 						case -1:
-							fmt.eprintf("%s: fork failed: resource temporarily unavailable\n", SHELL_NAME)
+							fmt.eprintf(
+								"%s: fork failed: resource temporarily unavailable\n",
+								SHELL_NAME,
+							)
 							last_exit_code = 1
 							continue
 						case 0:

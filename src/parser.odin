@@ -11,19 +11,17 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 	alloc_err: runtime.Allocator_Error
 	cmd_builder: strings.Builder
 	args_builder: strings.Builder
-	defer strings.builder_destroy(&cmd_builder)
-	defer strings.builder_destroy(&args_builder)
 
 	input := strings.trim_left(raw_input, " ")
 	if len(input) == 0 {
 		return {}, .Empty_Input
 	}
 
-	cmd_builder, alloc_err = strings.builder_make_none()
+	cmd_builder, alloc_err = strings.builder_make_none(context.temp_allocator)
 	if alloc_err != nil {
 		return {}, alloc_err
 	}
-	args_builder, alloc_err = strings.builder_make_none()
+	args_builder, alloc_err = strings.builder_make_none(context.temp_allocator)
 	if alloc_err != nil {
 		return {}, alloc_err
 	}
@@ -84,9 +82,8 @@ parse_input :: proc(raw_input: string) -> (result: Parse_Result, err: Error) {
 	args := [dynamic]string{}
 
 	arg: strings.Builder
-	defer strings.builder_destroy(&arg)
 
-	arg, alloc_err = strings.builder_make_none()
+	arg, alloc_err = strings.builder_make_none(context.temp_allocator)
 	if alloc_err != nil {
 		return {}, alloc_err
 	}

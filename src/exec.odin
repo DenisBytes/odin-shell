@@ -128,6 +128,9 @@ execute_pipeline :: proc(commands: []string) {
 					last_exit_code = 1
 					posix.exit(last_exit_code)
 				}
+				parse_result.stdin_redirect.filename = expand_parameters(
+					parse_result.stdin_redirect.filename,
+				)
 			}
 			if len(parse_result.stdout_redirect.filename) > 0 {
 				parse_result.stdout_redirect.filename, ok = expand_tilde(
@@ -142,6 +145,9 @@ execute_pipeline :: proc(commands: []string) {
 					last_exit_code = 1
 					posix.exit(last_exit_code)
 				}
+				parse_result.stdout_redirect.filename = expand_parameters(
+					parse_result.stdout_redirect.filename,
+				)
 			}
 			if len(parse_result.stderr_redirect.filename) > 0 {
 				parse_result.stderr_redirect.filename, ok = expand_tilde(
@@ -156,6 +162,9 @@ execute_pipeline :: proc(commands: []string) {
 					last_exit_code = 1
 					posix.exit(last_exit_code)
 				}
+				parse_result.stderr_redirect.filename = expand_parameters(
+					parse_result.stderr_redirect.filename,
+				)
 			}
 
 			new_args := make([dynamic]string, context.temp_allocator)
@@ -179,6 +188,9 @@ execute_pipeline :: proc(commands: []string) {
 					tilde_ok = false
 					break
 				}
+
+				parse_result.args[i] = expand_parameters(parse_result.args[i])
+
 				expanded := expand_braces(parse_result.args[i])
 				for e in expanded {
 					append(&new_args, e)

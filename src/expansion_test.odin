@@ -448,3 +448,393 @@ test_expand_braces_no_expansion_empty_string :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(result), 1)
 	testing.expect_value(t, result[0], "")
 }
+
+
+@(test)
+test_expand_param_no_dollar :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	result := expand_parameters("hello world")
+
+	testing.expect_value(t, result, "hello world")
+}
+
+
+@(test)
+test_expand_param_empty_string :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	result := expand_parameters("")
+
+	testing.expect_value(t, result, "")
+}
+
+
+@(test)
+test_expand_param_simple_var :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_TEST_SIMPLE", "hello")
+	result := expand_parameters("$OSH_TEST_SIMPLE")
+	os.unset_env("OSH_TEST_SIMPLE")
+
+	testing.expect_value(t, result, "hello")
+}
+
+
+@(test)
+test_expand_param_braced_var :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_TEST_BRACED", "world")
+	result := expand_parameters("${OSH_TEST_BRACED}")
+	os.unset_env("OSH_TEST_BRACED")
+
+	testing.expect_value(t, result, "world")
+}
+
+
+@(test)
+test_expand_param_unset_var :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.unset_env("OSH_TOTALLY_UNSET")
+	result := expand_parameters("$OSH_TOTALLY_UNSET")
+
+	testing.expect_value(t, result, "")
+}
+
+
+@(test)
+test_expand_param_unset_braced_var :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.unset_env("OSH_TOTALLY_UNSET")
+	result := expand_parameters("${OSH_TOTALLY_UNSET}")
+
+	testing.expect_value(t, result, "")
+}
+
+
+@(test)
+test_expand_param_exit_code :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	last_exit_code = 42
+	result := expand_parameters("$?")
+	last_exit_code = 0
+
+	testing.expect_value(t, result, "42")
+}
+
+
+@(test)
+test_expand_param_exit_code_zero :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	last_exit_code = 0
+	result := expand_parameters("$?")
+
+	testing.expect_value(t, result, "0")
+}
+
+
+@(test)
+test_expand_param_exit_code_127 :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	last_exit_code = 127
+	result := expand_parameters("$?")
+	last_exit_code = 0
+
+	testing.expect_value(t, result, "127")
+}
+
+
+@(test)
+test_expand_param_shell_name :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	result := expand_parameters("$0")
+
+	testing.expect_value(t, result, SHELL_NAME)
+}
+
+
+@(test)
+test_expand_param_pid :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	result := expand_parameters("$$")
+
+	testing.expect(t, len(result) > 0, "expected non-empty PID string")
+}
+
+
+@(test)
+test_expand_param_mixed_text_and_var :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_TEST_MIX", "there")
+	result := expand_parameters("hello $OSH_TEST_MIX friend")
+	os.unset_env("OSH_TEST_MIX")
+
+	testing.expect_value(t, result, "hello there friend")
+}
+
+
+@(test)
+test_expand_param_multiple_vars :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_A", "foo")
+	os.set_env("OSH_B", "bar")
+	result := expand_parameters("$OSH_A/$OSH_B")
+	os.unset_env("OSH_A")
+	os.unset_env("OSH_B")
+
+	testing.expect_value(t, result, "foo/bar")
+}
+
+
+@(test)
+test_expand_param_adjacent_vars :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_X", "ab")
+	os.set_env("OSH_Y", "cd")
+	result := expand_parameters("${OSH_X}${OSH_Y}")
+	os.unset_env("OSH_X")
+	os.unset_env("OSH_Y")
+
+	testing.expect_value(t, result, "abcd")
+}
+
+
+@(test)
+test_expand_param_trailing_dollar :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	result := expand_parameters("hello$")
+
+	testing.expect_value(t, result, "hello$")
+}
+
+
+@(test)
+test_expand_param_dollar_space :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	result := expand_parameters("$ hello")
+
+	testing.expect_value(t, result, "$ hello")
+}
+
+
+@(test)
+test_expand_param_dollar_slash :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	result := expand_parameters("$/foo")
+
+	testing.expect_value(t, result, "$/foo")
+}
+
+
+@(test)
+test_expand_param_unclosed_brace :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	result := expand_parameters("${FOO")
+
+	testing.expect_value(t, result, "${FOO")
+}
+
+
+@(test)
+test_expand_param_default_used :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.unset_env("OSH_UNSET_DEF")
+	result := expand_parameters("${OSH_UNSET_DEF:-fallback}")
+
+	testing.expect_value(t, result, "fallback")
+}
+
+
+@(test)
+test_expand_param_default_not_used :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_SET_DEF", "real")
+	result := expand_parameters("${OSH_SET_DEF:-fallback}")
+	os.unset_env("OSH_SET_DEF")
+
+	testing.expect_value(t, result, "real")
+}
+
+
+@(test)
+test_expand_param_assign_used :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.unset_env("OSH_UNSET_ASSIGN")
+	result := expand_parameters("${OSH_UNSET_ASSIGN:=assigned}")
+
+	testing.expect_value(t, result, "assigned")
+
+	env_val := os.get_env_alloc("OSH_UNSET_ASSIGN", context.temp_allocator)
+	testing.expect_value(t, env_val, "assigned")
+	os.unset_env("OSH_UNSET_ASSIGN")
+}
+
+
+@(test)
+test_expand_param_assign_not_used :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_SET_ASSIGN", "existing")
+	result := expand_parameters("${OSH_SET_ASSIGN:=ignored}")
+	os.unset_env("OSH_SET_ASSIGN")
+
+	testing.expect_value(t, result, "existing")
+}
+
+
+@(test)
+test_expand_param_alt_set :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_SET_ALT", "something")
+	result := expand_parameters("${OSH_SET_ALT:+replacement}")
+	os.unset_env("OSH_SET_ALT")
+
+	testing.expect_value(t, result, "replacement")
+}
+
+
+@(test)
+test_expand_param_alt_unset :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.unset_env("OSH_UNSET_ALT")
+	result := expand_parameters("${OSH_UNSET_ALT:+replacement}")
+
+	testing.expect_value(t, result, "")
+}
+
+
+@(test)
+test_expand_param_suffix_strip :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_PATH", "/home/user/file.txt")
+	result := expand_parameters("${OSH_PATH%.txt}")
+	os.unset_env("OSH_PATH")
+
+	testing.expect_value(t, result, "/home/user/file")
+}
+
+
+@(test)
+test_expand_param_suffix_no_match :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_PATH2", "/home/user/file.txt")
+	result := expand_parameters("${OSH_PATH2%.rs}")
+	os.unset_env("OSH_PATH2")
+
+	testing.expect_value(t, result, "/home/user/file.txt")
+}
+
+
+@(test)
+test_expand_param_prefix_strip :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_PRE", "/home/user/file.txt")
+	result := expand_parameters("${OSH_PRE#/home/}")
+	os.unset_env("OSH_PRE")
+
+	testing.expect_value(t, result, "user/file.txt")
+}
+
+
+@(test)
+test_expand_param_prefix_no_match :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_PRE2", "/home/user/file.txt")
+	result := expand_parameters("${OSH_PRE2#/var/}")
+	os.unset_env("OSH_PRE2")
+
+	testing.expect_value(t, result, "/home/user/file.txt")
+}
+
+
+@(test)
+test_expand_param_underscore_in_name :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_MY_VAR_123", "works")
+	result := expand_parameters("$OSH_MY_VAR_123")
+	os.unset_env("OSH_MY_VAR_123")
+
+	testing.expect_value(t, result, "works")
+}
+
+
+@(test)
+test_expand_param_var_then_punctuation :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.set_env("OSH_STOP", "val")
+	result := expand_parameters("$OSH_STOP!")
+	os.unset_env("OSH_STOP")
+
+	testing.expect_value(t, result, "val!")
+}
+
+
+@(test)
+test_expand_param_only_dollar :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	result := expand_parameters("$")
+
+	testing.expect_value(t, result, "$")
+}
+
+
+@(test)
+test_expand_param_double_dollar_in_text :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	result := expand_parameters("pid=$$")
+
+	testing.expect(t, len(result) > 4, "expected pid= plus digits")
+	testing.expect(t, result[:4] == "pid=", "expected pid= prefix")
+}
+
+
+@(test)
+test_expand_param_exit_code_in_text :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	last_exit_code = 7
+	result := expand_parameters("code=$?!")
+	last_exit_code = 0
+
+	testing.expect_value(t, result, "code=7!")
+}
+
+
+@(test)
+test_expand_param_default_empty_value :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+
+	os.unset_env("OSH_EMPTY_DEF")
+	result := expand_parameters("${OSH_EMPTY_DEF:-}")
+
+	testing.expect_value(t, result, "")
+}
