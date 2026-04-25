@@ -53,6 +53,16 @@ import "core:sys/posix"
 original_termios: posix.termios
 
 main :: proc() {
+	cli := parse_cli_args(os.args)
+	if cli.parse_error_message != "" {
+		os.exit(1)
+	}
+	login = cli.dash_l || len(os.args) > 0 && len(os.args[0]) > 0 && os.args[0][0] == '-'
+	interactive = bool(is_tty) && !cli.dash_c && cli.script_path == ""
+	if cli.dash_c {
+		os.exit(0)
+	}
+
 	// FD(0) == stdin
 	posix.tcgetattr(posix.FD(c.int(0)), &original_termios)
 
