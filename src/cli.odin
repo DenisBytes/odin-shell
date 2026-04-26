@@ -26,6 +26,11 @@ parse_cli_args :: proc(argv: []string) -> Cli_Args {
 			i += 1
 			break
 		}
+		if argv[i] == "-" {
+			cli_args.dash_s = true
+			i += 1
+			continue
+		}
 		if strings.starts_with(argv[i], "-") || strings.starts_with(argv[i], "+") {
 			for j in 1 ..< len(argv[i]) {
 				switch argv[i][j] {
@@ -39,6 +44,10 @@ parse_cli_args :: proc(argv: []string) -> Cli_Args {
 					cli_args.dash_s = true
 				case 'f':
 					cli_args.dash_f = true
+				case:
+					cli_args.parse_error_message = fmt.tprintf("bad option: -%c", argv[i][j])
+					fmt.eprintf("%s: %s\n", SHELL_NAME, cli_args.parse_error_message)
+					return cli_args
 				}
 			}
 			i += 1

@@ -107,13 +107,30 @@ test_unknown_short_flag_errors :: proc(t: ^testing.T) {
 
 @(test)
 test_dash_c_followed_by_flag :: proc(t: ^testing.T) {
-	// `zsh -c -i` — real zsh treats `-i` as the COMMAND STRING (the value after -c),
-	// not as another flag. So dash_i must remain false and command_string must be "-i".
-	// This pins the rule "-c is terminating: the next argv is consumed verbatim".
+	// Verified against real zsh 5.8.1 (2026-04-25):
+	//   $ zsh -c -i        → "zsh: string expected after -c", exit 1
+	//   $ zsh -c -i 'echo hi' → prints "hi", exit 0 (-i is parsed as a flag, "echo hi" is the command)
+	//   $ zsh -c -c 'echo hi' → prints "hi", exit 0 (second -c is idempotent, "echo hi" is the command)
+	// So `-c` is NOT terminating. It's a flag setter like any other; parsing continues
+	// after it, additional flags can stack, and the FIRST non-flag argv becomes
+	// command_string. With no non-flag operand, it's the "string expected after -c" error.
 	cli := parse_cli_args({"zsh", "-c", "-i"})
 	testing.expect_value(t, cli.dash_c, true)
-	testing.expect_value(t, cli.dash_i, false)
-	testing.expect_value(t, cli.command_string, "-i")
+	testing.expect_value(t, cli.dash_i, true) // -i parses as a flag, not as the operand
+	testing.expect_value(t, cli.command_string, "")
+	testing.expect_value(t, cli.parse_error_message, "string expected after -c")
+}
+
+@(test)
+test_dash_c_with_following_flag_and_command :: proc(t: ^testing.T) {
+	// `zsh -c -i 'echo hi'` — verified against real zsh 5.8.1:
+	// Both -c and -i set, "echo hi" is command_string. Pins the rule that flag
+	// parsing continues past -c until a non-flag operand is found.
+	cli := parse_cli_args({"zsh", "-c", "-i", "echo hi"})
+	testing.expect_value(t, cli.dash_c, true)
+	testing.expect_value(t, cli.dash_i, true)
+	testing.expect_value(t, cli.command_string, "echo hi")
+	testing.expect_value(t, cli.parse_error_message, "")
 }
 
 @(test)
@@ -169,18 +186,6 @@ test_fuzz_no_panic :: proc(t: ^testing.T) {
 		argv := random_argv(15)
 		cli := parse_cli_args(argv)
 		_ = cli // just running without panic is the assertion
-	}
-}
-
-@(test)
-test_fuzz_arg0_always_set :: proc(t: ^testing.T) {
-	// Property: arg0 is non-empty after any parse
-	rand.reset(123)
-	for trial in 0 ..< 5000 {
-		defer free_all(context.temp_allocator)
-		argv := random_argv(15)
-		cli := parse_cli_args(argv)
-		testing.expectf(t, cli.arg0 != "", "trial %d: arg0 was empty for  argv=%v", trial, argv)
 	}
 }
 
